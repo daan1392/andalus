@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "andalus"
-version = "0.1.0"
+version = "0.1.1"
 description = "Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Source data assimilation tool for improving predictions of nuclear applications."
 readme = "README.md"
 authors = [
