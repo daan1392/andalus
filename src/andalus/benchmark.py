@@ -63,7 +63,7 @@ class Benchmark:
         sens0_path : str
             path to the Serpent _sens0.m file
         kind : str, optional
-            kind of observable, by default "k-eff"
+            kind of observable, by default "keff"
         materials : _type_, optional
             The material in which the sensitivity is calculated, by default None
         zailist : _type_, optional
@@ -97,7 +97,7 @@ class Benchmark:
         return cls(title=title, kind=kind, m=m, dm=dm, c=c, dc=dc, s=sensitivity)
 
     @classmethod
-    def from_hdf5(cls, file_path, title, kind: str = "k-eff"):
+    def from_hdf5(cls, file_path, title, kind: str = "keff"):
         """
         Create a Benchmark instance from an HDF5 file.
 
@@ -181,3 +181,11 @@ if __name__ == "__main__":
         sens0_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_sens0.m",
     )
     bench.print_summary()
+    import matplotlib.pyplot as plt
+
+    bench.s.plot_sensitivity(zais=[922380], perts=[2, 4])
+    plt.show()
+
+    bench.to_hdf5("benchmark_data.h5")
+    loaded_bench = Benchmark.from_hdf5("benchmark_data.h5", title="HMF001")
+    loaded_bench.print_summary()
