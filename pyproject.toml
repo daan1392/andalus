@@ -21,6 +21,13 @@ license = {text = "MIT"}
 dependencies = [
   "typer",
   "rich",
+  "pandas",
+  "numpy<2.0.0",
+  "h5py",
+  "serpentTools",
+  "matplotlib",
+  "sandy",
+  "setuptools", # Because serpentTools does not have distutils
 ]
 requires-python = ">= 3.12"
 

@@ -2,6 +2,8 @@
 
 Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Source data assimilation tool for improving predictions of nuclear applications.
 
+![Alt text](assets/data-assimilation.png)
+
 ## Getting started
 
 - [Installation](installation.md) - how to install ANDALUS

@@ -1,4 +1,5 @@
 # Justfile for andalus
+set shell := ["cmd.exe", "/c"]
 
 # Show available commands
 list:
