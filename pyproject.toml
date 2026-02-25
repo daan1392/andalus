@@ -29,7 +29,7 @@ dependencies = [
   "sandy",
   "setuptools", # Because serpentTools does not have distutils
 ]
-requires-python = ">= 3.12"
+requires-python = ">= 3.08, <3.13" # serpentTools is not compatible with >3.13
 
 [dependency-groups]
 dev = [

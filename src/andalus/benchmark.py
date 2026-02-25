@@ -83,8 +83,8 @@ class Benchmark:
             pertlist = ["mt 2 xs", "mt 4 xs", "mt 18 xs", "mt 102 xs", "nubar prompt", "chi prompt"]
 
         results = serpentTools.read(results_path)
-        c = results.resData["absKeff"][0]
-        dc = results.resData["absKeff"][1]
+        c = results.resdata["absKeff"][0]
+        dc = results.resdata["absKeff"][1]
 
         sensitivity = Sensitivity.from_serpent(
             sens0_path=sens0_path,

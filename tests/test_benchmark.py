@@ -25,15 +25,15 @@ def test_invalid_kind(mock_sensitivity):
         Benchmark("EXP", "invalid", 1.0, 0.1, 1.0, 0.1, mock_sensitivity)
 
 
-# def test_from_serpent_real_files():
-#     """Integration test using actual Serpent output files."""
-#     # Ensure these paths are correct relative to where you run pytest
-#     res_path = "tests/hmf001.ser_res.m"
-#     sens_path = "tests/hmf001.ser_sens0.m"
+def test_from_serpent_real_files():
+    """Integration test using actual Serpent output files."""
+    # Ensure these paths are correct relative to where you run pytest
+    res_path = "tests/hmf001.ser_res.m"
+    sens_path = "tests/hmf001.ser_sens0.m"
 
-#     bench = Benchmark.from_serpent(title="HMF001", m=1.00000, dm=0.00100, results_path=res_path, sens0_path=sens_path)
+    bench = Benchmark.from_serpent(title="HMF001", m=1.00000, dm=0.00100, results_path=res_path, sens0_path=sens_path)
 
-#     # Check values from your actual HMF001 results
-#     assert bench.title == "HMF001"
-#     assert 0.998895 < bench.c < 0.998899  # Broad check to ensure it read a k-eff
-#     print(f"Read real k-eff: {bench.c}")
+    # Check values from your actual HMF001 results
+    assert bench.title == "HMF001"
+    assert 0.998895 < bench.c < 0.998899  # Broad check to ensure it read a k-eff
+    print(f"Read real k-eff: {bench.c}")
