@@ -14,7 +14,7 @@ def mock_sensitivity():
 
 def test_benchmark_initialization(mock_sensitivity):
     """Test if the dataclass stores values correctly."""
-    b = Benchmark("EXP", "k-eff", 1.0, 0.1, 1.0, 0.1, mock_sensitivity)
+    b = Benchmark("EXP", "keff", 1.0, 0.1, 1.0, 0.1, mock_sensitivity)
     assert b.title == "EXP"
     assert b.m == 1.0
 
