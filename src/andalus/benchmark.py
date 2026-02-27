@@ -1,7 +1,15 @@
-from dataclasses import dataclass
+"""Module containing the Benchmark and BenchmarkSuite classes,
+which are used to represent and manage benchmark data.
+"""
+
+__all__ = ["Benchmark", "BenchmarkSuite"]
+__version__ = "0.1.1"
+__author__ = "Daan Houben"
+
+from dataclasses import dataclass, field
+from typing import Dict
 
 import h5py
-import pandas as pd
 import serpentTools
 
 from andalus.sensitivity import Sensitivity
@@ -21,19 +29,19 @@ class Benchmark:
 
     def __post_init__(self):
         if not isinstance(self.title, str):
-            raise TypeError("Title must be a string")
+            raise TypeError(f"Title '{self.title}' must be a string")
         if self.kind not in ["keff"]:
             raise ValueError(f"Type '{self.kind}' not implemented.")
         if not isinstance(self.m, (int, float)):
-            raise TypeError("Measurement must be a number")
+            raise TypeError(f"Measurement {self.m} must be a number")
         if not isinstance(self.dm, (int, float)):
-            raise TypeError("Measurement uncertainty must be a number")
+            raise TypeError(f"Measurement uncertainty {self.dm} must be a number")
         if not isinstance(self.c, (int, float)):
-            raise TypeError("Calculated value must be a number")
+            raise TypeError(f"Calculated value {self.c} must be a number")
         if not isinstance(self.dc, (int, float)):
-            raise TypeError("Calculated uncertainty must be a number")
+            raise TypeError(f"Calculated uncertainty {self.dc} must be a number")
         if not isinstance(self.s, Sensitivity):
-            raise TypeError("Sensitivity must be a Sensitivity object")
+            raise TypeError(f"Sensitivity {self.s} must be a Sensitivity object")
 
     @classmethod
     def from_serpent(
@@ -97,7 +105,7 @@ class Benchmark:
         return cls(title=title, kind=kind, m=m, dm=dm, c=c, dc=dc, s=sensitivity)
 
     @classmethod
-    def from_hdf5(cls, file_path, title, kind: str = "keff"):
+    def from_hdf5(cls, file_path, title: str, kind: str = "keff"):
         """
         Create a Benchmark instance from an HDF5 file.
 
@@ -116,10 +124,12 @@ class Benchmark:
             A new Benchmark instance with the loaded data.
         """
         with h5py.File(file_path, "r") as f:
-            if title not in f:
+            if kind not in f:
+                raise KeyError(f"Benchmark type '{kind}' not found in {file_path}")
+            if title not in f[kind]:
                 raise KeyError(f"Benchmark '{title}' not found in {file_path}")
 
-            grp = f[title]
+            grp = f[kind][title]
             m = grp.attrs["m"]
             dm = grp.attrs["dm"]
             c = grp.attrs["c"]
@@ -132,14 +142,8 @@ class Benchmark:
             dm=dm,
             c=c,
             dc=dc,
-            s=Sensitivity(pd.read_hdf(file_path, f"{title}/sensitivity")),
+            s=Sensitivity.from_hdf5(file_path, title=title, kind=kind),
         )
-
-    def print_summary(self):
-        print(f"Benchmark: {self.title}")
-        print(f"Type: {self.kind}")
-        print(f"Measurement: {self.m} ± {self.dm}")
-        print(f"Calculated: {self.c} ± {self.dc}")
 
     def to_hdf5(self, file_path="benchmarks.h5"):
         """
@@ -148,27 +152,92 @@ class Benchmark:
         Parameters
         ----------
         file_path : str, optional
-            The path to the HDF5 file where the benchmark data will be saved. Default is 'benchmarks.h5'.
+            The path to the HDF5 file where the benchmark data will be saved.
+              Default is 'benchmarks.h5'.
         """
         with h5py.File(file_path, "a") as f:
             # Create group for this benchmark if it exists
-            if self.title in f:
-                del f[self.title]
+            # if self.title in f[self.kind]:
+            #     del f[f"{self.kind}/{self.title}"]
 
             # Create group and save attributes
-            grp = f.create_group(self.title)
+            grp = f.create_group(f"{self.kind}/{self.title}")
             grp.attrs["m"] = self.m
             grp.attrs["dm"] = self.dm
             grp.attrs["c"] = self.c
             grp.attrs["dc"] = self.dc
 
         # Save sensitivity DataFrame using pandas to_hdf
-        self.s.to_hdf(
-            path_or_buf=file_path,
-            key=f"{self.title}/sensitivity",
-            mode="a",
-            format="table",
-        )
+        self.s.to_hdf(file_path, key=f"{self.kind}/{self.title}/sensitivity", mode="a", format="table")
+
+    def print_summary(self):
+        """Print a quick summary of a benchmark object."""
+        print(f"Benchmark: {self.title}")
+        print(f"Type: {self.kind}")
+        print(f"Measurement: {self.m} ± {self.dm}")
+        print(f"Calculated: {self.c} ± {self.dc}")
+
+
+@dataclass
+class BenchmarkSuite:
+    """A benchmarksuite is a combined set of benchmark objects."""
+
+    benchmarks: Dict[str, Benchmark] = field(default_factory=dict)
+
+    def __post_init__(self):
+        for benchmark in self.benchmarks.values():
+            if not isinstance(benchmark, Benchmark):
+                raise TypeError(f"Benchmark {benchmark.title} is not a Benchmark object")
+
+    @classmethod
+    def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
+        """Retrieve a set of benchmarks from a database.
+
+        Parameters
+        ----------
+        file_path : str
+            file path where the database is located.
+        titles : list, optional
+            Titles which have to be extracted from the database, if None
+            return all the benchmarks available in the database, by default None.
+
+        Returns
+        -------
+        BenchmarkSuite
+            Returns a BenchmarkSuite object containing the imported Benchmark objects.
+        """
+        if not titles:
+            with h5py.File(file_path, "r") as f:
+                titles = list(f[kind].keys())
+
+        return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title) for title in titles})
+
+    def get(self, title: str) -> Benchmark | None:
+        """
+        Get a benchmark from the suite.
+
+        Parameters
+        ----------
+        title : str
+            Title of the benchmark to be retrieved.
+
+        Returns
+        -------
+        Benchmark
+            Benchmark object.
+        """
+        return self.benchmarks.get(title)
+
+    def remove(self, title: str):
+        """
+        Remove benchmark from the suite.
+
+        Parameters
+        ----------
+        title : str
+            Title of the benchmark to be removed.
+        """
+        self.benchmarks.pop(title, None)
 
 
 if __name__ == "__main__":
