@@ -17,6 +17,7 @@ def sample_cov():
     cov.mf = 33
     return cov
 
+
 @pytest.fixture
 def real_cov():
     """Load a real covariance matrix from the test data directory."""
@@ -55,16 +56,14 @@ def test_mt_filtering(sample_cov, tmp_path):
 
 def test_suite_assembly(sample_cov, real_cov):
     """Test block-diagonal assembly in CovarianceSuite."""
-    suite = CovarianceSuite.from_dict({
-        922350: sample_cov,
-        922380: real_cov
-    })
+    suite = CovarianceSuite.from_dict({922350: sample_cov, 922380: real_cov})
 
     full_mat = suite.matrix
-    assert full_mat.shape == (4+6*33, 4+6*33) # 202 = 4 bins for 922350 + 33 bins for 922380 * 6 MTs
+    assert full_mat.shape == (4 + 6 * 33, 4 + 6 * 33)  # 202 = 4 bins for 922350 + 33 bins for 922380 * 6 MTs
     assert "ZAI" in full_mat.index.names
     # Check that cross-isotope blocks are zero
     assert full_mat.loc[922350, 922380].sum().sum() == 0
+
 
 def test_correlation_calculation(sample_cov):
     """Test that the correlation matrix is correctly calculated."""

@@ -1,18 +1,21 @@
-from benchmark import BenchmarkSuite
-from application import ApplicationSuite
-from covariance import CovarianceSuite
+from dataclasses import dataclass
 
-import pandas as pd
 import numpy as np
-from .utils import sandwich
+import pandas as pd
+
+from andalus.application import ApplicationSuite
+from andalus.benchmark import BenchmarkSuite
+from andalus.covariance import CovarianceSuite
+from andalus.utils import sandwich
+
 
 @dataclass
 class AssimilationSuite:
     """Class to manage a collection of benchmark, application and covariance
-    data for assimilation purposes. This class can be used to assemble a complete 
+    data for assimilation purposes. This class can be used to assemble a complete
     dataset for assimilation, and to perform operations on the entire suite.
     """
-    
+
     benchmarks: BenchmarkSuite
     applications: ApplicationSuite
     covariances: CovarianceSuite
@@ -23,8 +26,7 @@ class AssimilationSuite:
         return pd.concat([self.benchmarks.s, self.applications.s], axis=0)
 
     def ck_matrix(self):
-        """Generate a ck-similarity matrix for the current assimilation suite.
-        """
+        """Generate a ck-similarity matrix for the current assimilation suite."""
         cov = sandwich(self.s, self.covariances.matrix, self.s)
         var = np.diag(cov)
 
