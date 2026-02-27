@@ -216,7 +216,7 @@ class BenchmarkSuite:
         if not self.benchmarks:
             AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.kind for benchmark in self.benchmarks.values()], index=self.titles)
-    
+
     @property
     def zais(self) -> list:
         """Returns a list of unique ZAIs in the sensitivity data of the benchmarks in the suite.
@@ -329,7 +329,7 @@ class BenchmarkSuite:
         return pd.concat([benchmark.s.iloc[:, 1].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
             0
         )
-    
+
     @classmethod
     def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
         """Retrieve a set of benchmarks from a database.
