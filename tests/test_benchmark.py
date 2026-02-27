@@ -14,7 +14,7 @@ from andalus.sensitivity import Sensitivity
 def test_sensitivity():
     """Provides a Sensitivity object from real test data."""
     return Sensitivity.from_serpent(
-        sens0_path="tests/hmf001.ser_sens0.m",
+        sens0_path="data/hmf001.ser_sens0.m",
         title="HMF001",
         kind="keff",
         materiallist=["total"],
@@ -173,8 +173,8 @@ class TestBenchmarkFromSerpent:
             title="HMF001",
             m=1.00000,
             dm=0.00200,
-            results_path="tests/hmf001.ser_res.m",
-            sens0_path="tests/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
         )
         assert b.title == "HMF001"
         assert b.kind == "keff"
@@ -190,8 +190,8 @@ class TestBenchmarkFromSerpent:
             title="HMF001",
             m=1.0,
             dm=0.002,
-            results_path="tests/hmf001.ser_res.m",
-            sens0_path="tests/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
             kind="keff",
         )
         assert b.kind == "keff"
@@ -203,8 +203,8 @@ class TestBenchmarkFromSerpent:
             title="HMF001",
             m=1.0,
             dm=0.002,
-            results_path="tests/hmf001.ser_res.m",
-            sens0_path="tests/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
             materials=None,
         )
         assert b.s is not None
@@ -216,8 +216,8 @@ class TestBenchmarkFromSerpent:
             title="HMF001",
             m=1.0,
             dm=0.002,
-            results_path="tests/hmf001.ser_res.m",
-            sens0_path="tests/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
             pertlist=None,
         )
         assert b.s is not None

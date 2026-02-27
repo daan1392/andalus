@@ -1,5 +1,5 @@
-"""Module containing the Benchmark and BenchmarkSuite classes,
-which are used to represent and manage benchmark data.
+"""Module containing the Application and ApplicationSuite classes,
+which are used to represent and manage application data.
 """
 
 __all__ = ["Application", "ApplicationSuite"]

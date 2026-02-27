@@ -379,23 +379,3 @@ class BenchmarkSuite:
             Title of the benchmark to be removed.
         """
         self.benchmarks.pop(title, None)
-
-
-if __name__ == "__main__":
-    # Example usage
-    bench = Benchmark.from_serpent(
-        title="HMF001",
-        m=1.00000,
-        dm=0.00200,
-        results_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_res.m",
-        sens0_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_sens0.m",
-    )
-    bench.print_summary()
-    import matplotlib.pyplot as plt
-
-    bench.s.plot_sensitivity(zais=[922380], perts=[2, 4])
-    plt.show()
-
-    bench.to_hdf5("benchmark_data.h5")
-    loaded_bench = Benchmark.from_hdf5("benchmark_data.h5", title="HMF001")
-    loaded_bench.print_summary()

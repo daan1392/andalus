@@ -14,7 +14,7 @@ from andalus.sensitivity import Sensitivity
 def test_sensitivity():
     """Provides a Sensitivity object from real test data."""
     return Sensitivity.from_serpent(
-        sens0_path="tests/hmf001.ser_sens0.m",
+        sens0_path="data/hmf001.ser_sens0.m",
         title="HMF001",
         kind="keff",
         materiallist=["total"],
@@ -129,8 +129,8 @@ class TestApplicationFromSerpent:
         """Test creating Application from Serpent output files."""
         a = Application.from_serpent(
             title="HMF001",
-            results_path="tests/hmf001.ser_res.m",
-            sens0_path="tests/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
         )
         assert a.title == "HMF001"
         assert a.kind == "keff"

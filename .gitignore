@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # HDF5 extensions
-*.h5
+# *.h5
 
 # Distribution / packaging
 build/
