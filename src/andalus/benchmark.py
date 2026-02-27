@@ -191,56 +191,6 @@ class BenchmarkSuite:
             if not isinstance(benchmark, Benchmark):
                 raise TypeError(f"Benchmark {benchmark.title} is not a Benchmark object")
 
-    @classmethod
-    def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
-        """Retrieve a set of benchmarks from a database.
-
-        Parameters
-        ----------
-        file_path : str
-            file path where the database is located.
-        titles : list, optional
-            Titles which have to be extracted from the database, if None
-            return all the benchmarks available in the database, by default None.
-
-        Returns
-        -------
-        BenchmarkSuite
-            Returns a BenchmarkSuite object containing the imported Benchmark objects.
-        """
-        if not titles:
-            with h5py.File(file_path, "r") as f:
-                titles = list(f[kind].keys())
-
-        return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title) for title in titles})
-
-    def get(self, title: str) -> Benchmark | None:
-        """
-        Get a benchmark from the suite.
-
-        Parameters
-        ----------
-        title : str
-            Title of the benchmark to be retrieved.
-
-        Returns
-        -------
-        Benchmark
-            Benchmark object.
-        """
-        return self.benchmarks.get(title)
-
-    def remove(self, title: str):
-        """
-        Remove benchmark from the suite.
-
-        Parameters
-        ----------
-        title : str
-            Title of the benchmark to be removed.
-        """
-        self.benchmarks.pop(title, None)
-
     @property
     def titles(self) -> list:
         """Returns a list of benchmark titles in the suite.
@@ -266,6 +216,22 @@ class BenchmarkSuite:
         if not self.benchmarks:
             AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.kind for benchmark in self.benchmarks.values()], index=self.titles)
+    
+    @property
+    def zais(self) -> list:
+        """Returns a list of unique ZAIs in the sensitivity data of the benchmarks in the suite.
+
+        Returns
+        -------
+        list of int
+            List of unique ZAIs in the sensitivity data of the benchmarks in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        zais = set()
+        for benchmark in self.benchmarks.values():
+            zais.update(benchmark.s.index.get_level_values("ZAI").unique())
+        return sorted(zais)
 
     @property
     def m(self) -> pd.Series:
@@ -363,6 +329,56 @@ class BenchmarkSuite:
         return pd.concat([benchmark.s.iloc[:, 1].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
             0
         )
+    
+    @classmethod
+    def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
+        """Retrieve a set of benchmarks from a database.
+
+        Parameters
+        ----------
+        file_path : str
+            file path where the database is located.
+        titles : list, optional
+            Titles which have to be extracted from the database, if None
+            return all the benchmarks available in the database, by default None.
+
+        Returns
+        -------
+        BenchmarkSuite
+            Returns a BenchmarkSuite object containing the imported Benchmark objects.
+        """
+        if not titles:
+            with h5py.File(file_path, "r") as f:
+                titles = list(f[kind].keys())
+
+        return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title) for title in titles})
+
+    def get(self, title: str) -> Benchmark | None:
+        """
+        Get a benchmark from the suite.
+
+        Parameters
+        ----------
+        title : str
+            Title of the benchmark to be retrieved.
+
+        Returns
+        -------
+        Benchmark
+            Benchmark object.
+        """
+        return self.benchmarks.get(title)
+
+    def remove(self, title: str):
+        """
+        Remove benchmark from the suite.
+
+        Parameters
+        ----------
+        title : str
+            Title of the benchmark to be removed.
+        """
+        self.benchmarks.pop(title, None)
 
 
 if __name__ == "__main__":
