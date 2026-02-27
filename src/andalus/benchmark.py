@@ -61,23 +61,23 @@ class Benchmark:
         Parameters
         ----------
         title : str
-            title of the benchmar
+            title of the benchmark.
         m : float
-            measurement value
+            measurement value.
         dm : float
-            measurement uncertainty
+            measurement uncertainty.
         results_path : str
-            path to the Serpent _res.m file
+            path to the Serpent _res.m file.
         sens0_path : str
-            path to the Serpent _sens0.m file
+            path to the Serpent _sens0.m file.
         kind : str, optional
-            kind of observable, by default "keff"
+            kind of observable, by default "keff".
         materials : _type_, optional
-            The material in which the sensitivity is calculated, by default None
+            The material in which the sensitivity is calculated, by default None.
         zailist : _type_, optional
-            The ZAIs which have to be extracted from the sensitivity file, by default None
+            The ZAIs which have to be extracted from the sensitivity file, by default None.
         pertlist : _type_, optional
-            The perturbations which have to be extracted from the sensitivity file, by default None
+            The perturbations which have to be extracted from the sensitivity file, by default None.
 
         Returns
         -------
