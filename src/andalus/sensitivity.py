@@ -188,6 +188,27 @@ class Sensitivity(pd.DataFrame):
         unique_zais = self.index.get_level_values("ZAI").unique()
         return [zam2latex(z) for z in unique_zais]
 
+    def rename_sensitivity(self, new_title: str) -> "Sensitivity":
+        """
+        Rename the benchmark columns and update the title metadata.
+
+        Parameters
+        ----------
+        new_title : str
+            The new identifier for the benchmark columns.
+
+        Returns
+        -------
+        Sensitivity
+            A new Sensitivity object with updated columns and title metadata.
+        """
+        s = self.copy()
+        s.columns = [new_title, f"{new_title}_std"]
+
+        s.title = new_title
+
+        return s
+
     def plot_sensitivity(self, zais, perts, ax=None, **kwargs):
         """
         Return a plot of the sensitivity profile normalized by unit lethargy

@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from typing import Dict
 
 import h5py
+import numpy as np
+import pandas as pd
 import serpentTools
 
 from andalus.sensitivity import Sensitivity
@@ -238,6 +240,129 @@ class BenchmarkSuite:
             Title of the benchmark to be removed.
         """
         self.benchmarks.pop(title, None)
+
+    @property
+    def titles(self) -> list:
+        """Returns a list of benchmark titles in the suite.
+
+        Returns
+        -------
+        list of str
+            List of benchmark titles in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return list(self.benchmarks.keys())
+
+    @property
+    def kinds(self) -> pd.Series:
+        """Returns a pd.Series of benchmark types in the suite.
+
+        Returns
+        -------
+        pd.Series of str
+            Series of benchmark types in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.Series([benchmark.kind for benchmark in self.benchmarks.values()], index=self.titles)
+
+    @property
+    def m(self) -> pd.Series:
+        """Returns a pd.Series of benchmark measurements in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of benchmark measurements in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.Series([benchmark.m for benchmark in self.benchmarks.values()], index=self.titles)
+
+    @property
+    def dm(self) -> pd.Series:
+        """Returns a pd.Series of benchmark measurement uncertainties in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of benchmark measurement uncertainties in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.Series([benchmark.dm for benchmark in self.benchmarks.values()], index=self.titles)
+
+    @property
+    def cov_m(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of benchmark measurement covariance in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of benchmark measurement covariance in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.DataFrame(
+            data=np.diag([benchmark.dm**2 for benchmark in self.benchmarks.values()]),
+            index=self.titles,
+            columns=self.titles,
+        )
+
+    @property
+    def c(self) -> pd.Series:
+        """Returns a pd.Series of benchmark calculated values in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of benchmark calculated values in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.Series([benchmark.c for benchmark in self.benchmarks.values()], index=self.titles)
+
+    @property
+    def dc(self) -> pd.Series:
+        """Returns a pd.Series of benchmark calculated uncertainties in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of benchmark calculated uncertainties in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.Series([benchmark.dc for benchmark in self.benchmarks.values()], index=self.titles)
+
+    @property
+    def s(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of sensitivity objects in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of sensitivity objects in the suite.
+        """
+        if not self.benchmarks:
+            AssertionError("No benchmarks in the suite.")
+        return pd.concat([benchmark.s.iloc[:, 0].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
+            0
+        )
+
+    @property
+    def ds(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of sensitivity uncertainties in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of sensitivity uncertainties in the suite.
+        """
+        return pd.concat([benchmark.s.iloc[:, 1].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
+            0
+        )
 
 
 if __name__ == "__main__":

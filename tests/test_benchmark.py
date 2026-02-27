@@ -2,6 +2,8 @@ import os
 import tempfile
 from dataclasses import FrozenInstanceError
 
+import numpy as np
+import pandas as pd
 import pytest
 
 from andalus.benchmark import Benchmark, BenchmarkSuite
@@ -271,46 +273,6 @@ class TestBenchmarkPrintSummary:
         assert "Calculated:" in captured.out
 
 
-class TestBenchmarkSuiteInitialization:
-    """Tests for BenchmarkSuite initialization and validation."""
-
-    def test_empty_suite_creation(self):
-        """Test creating an empty BenchmarkSuite."""
-        suite = BenchmarkSuite()
-        assert len(suite.benchmarks) == 0
-
-    def test_suite_with_benchmarks(self, test_benchmark):
-        """Test creating a BenchmarkSuite with benchmarks."""
-        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
-        assert len(suite.benchmarks) == 1
-        assert "HMF001" in suite.benchmarks
-
-    def test_suite_get_existing_benchmark(self, test_benchmark):
-        """Test retrieving an existing benchmark from suite."""
-        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
-        retrieved = suite.get("HMF001")
-        assert retrieved is test_benchmark
-
-    def test_suite_get_missing_benchmark(self, test_benchmark):
-        """Test retrieving a non-existent benchmark returns None."""
-        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
-        retrieved = suite.get("NonExistent")
-        assert retrieved is None
-
-    def test_suite_remove_benchmark(self, test_benchmark):
-        """Test removing a benchmark from suite."""
-        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
-        suite.remove("HMF001")
-        assert len(suite.benchmarks) == 0
-        assert suite.get("HMF001") is None
-
-    def test_suite_remove_nonexistent_benchmark(self, test_benchmark):
-        """Test that removing non-existent benchmark doesn't raise error."""
-        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
-        suite.remove("NonExistent")  # Should not raise
-        assert len(suite.benchmarks) == 1
-
-
 class TestBenchmarkSuiteHDF5:
     """Tests for BenchmarkSuite HDF5 operations."""
 
@@ -356,3 +318,96 @@ class TestBenchmarkSuiteHDF5:
             assert len(suite.benchmarks) == 2
             assert "HMF001" in suite.benchmarks
             assert "HMF002" in suite.benchmarks
+
+
+class TestBenchmarkSuiteInitialization:
+    """Tests for BenchmarkSuite initialization and validation."""
+
+    def test_empty_suite_creation(self):
+        """Test creating an empty BenchmarkSuite."""
+        suite = BenchmarkSuite()
+        assert len(suite.benchmarks) == 0
+
+    def test_suite_with_benchmarks(self, test_benchmark):
+        """Test creating a BenchmarkSuite with benchmarks."""
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
+        assert len(suite.benchmarks) == 1
+        assert "HMF001" in suite.benchmarks
+
+    def test_suite_get_existing_benchmark(self, test_benchmark):
+        """Test retrieving an existing benchmark from suite."""
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
+        retrieved = suite.get("HMF001")
+        assert retrieved is test_benchmark
+
+    def test_suite_get_missing_benchmark(self, test_benchmark):
+        """Test retrieving a non-existent benchmark returns None."""
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
+        retrieved = suite.get("NonExistent")
+        assert retrieved is None
+
+    def test_suite_remove_benchmark(self, test_benchmark):
+        """Test removing a benchmark from suite."""
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
+        suite.remove("HMF001")
+        assert len(suite.benchmarks) == 0
+        assert suite.get("HMF001") is None
+
+    def test_suite_remove_nonexistent_benchmark(self, test_benchmark):
+        """Test that removing non-existent benchmark doesn't raise error."""
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark})
+        suite.remove("NonExistent")  # Should not raise
+        assert len(suite.benchmarks) == 1
+
+    def test_suite_properties(self, test_benchmark):
+        """Test BenchmarkSuite properties (titles, kinds, m/dm/c/dc, cov, s/ds)."""
+        b2 = Benchmark(
+            title="HMF002",
+            kind="keff",
+            m=2.0,
+            dm=0.003,
+            c=1.001,
+            dc=0.0002,
+            s=test_benchmark.s.rename_sensitivity("HMF002"),
+        )
+        suite = BenchmarkSuite(benchmarks={"HMF001": test_benchmark, "HMF002": b2})
+
+        # titles & kinds
+        assert suite.titles == ["HMF001", "HMF002"]
+        assert isinstance(suite.kinds, pd.Series)
+        assert list(suite.kinds.values) == ["keff", "keff"]
+
+        # measurement series and uncertainties
+        assert isinstance(suite.m, pd.Series)
+        assert suite.m["HMF001"] == pytest.approx(1.0)
+        assert suite.m["HMF002"] == pytest.approx(2.0)
+
+        assert isinstance(suite.dm, pd.Series)
+        assert suite.dm["HMF001"] == pytest.approx(0.002)
+        assert suite.dm["HMF002"] == pytest.approx(0.003)
+
+        # covariance matrix (diagonal dm^2, off-diagonal zero)
+        cov = suite.cov_m
+        assert isinstance(cov, pd.DataFrame)
+        expected_diag = np.array([0.002**2, 0.003**2])
+        assert np.allclose(np.diag(cov.values), expected_diag)
+        assert np.allclose(cov.values - np.diag(np.diag(cov.values)), 0)
+
+        # calculated values and uncertainties
+        assert isinstance(suite.c, pd.Series)
+        assert suite.c["HMF001"] == pytest.approx(test_benchmark.c)
+        assert suite.c["HMF002"] == pytest.approx(1.001)
+
+        assert isinstance(suite.dc, pd.Series)
+        assert suite.dc["HMF001"] == pytest.approx(test_benchmark.dc)
+        assert suite.dc["HMF002"] == pytest.approx(0.0002)
+
+        # sensitivity matrices
+        s_df = suite.s
+        ds_df = suite.ds
+        assert isinstance(s_df, pd.DataFrame)
+        assert isinstance(ds_df, pd.DataFrame)
+        assert list(s_df.columns) == ["HMF001", "HMF002"]
+        assert list(ds_df.columns) == ["HMF001_std", "HMF002_std"]
+        # indices should match the sensitivity index from the input sensitivity
+        assert list(s_df.index) == list(test_benchmark.s.index)
