@@ -27,8 +27,7 @@ qa:
 
 # Run all the tests for all the supported Python versions
 testall:
-    uv run --python=3.08 pytest
-    uv run --python=3.09 pytest
+    uv run --python=3.10 pytest
     uv run --python=3.11 pytest
     uv run --python=3.12 pytest
 

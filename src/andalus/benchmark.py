@@ -7,7 +7,6 @@ __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
 from dataclasses import dataclass, field
-from typing import Dict
 
 import h5py
 import numpy as np
@@ -184,7 +183,7 @@ class Benchmark:
 class BenchmarkSuite:
     """A benchmarksuite is a combined set of benchmark objects."""
 
-    benchmarks: Dict[str, Benchmark] = field(default_factory=dict)
+    benchmarks: dict[str, Benchmark] = field(default_factory=dict)
 
     def __post_init__(self):
         for benchmark in self.benchmarks.values():

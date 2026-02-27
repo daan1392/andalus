@@ -7,7 +7,6 @@ __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
 from dataclasses import dataclass, field
-from typing import Dict
 
 import h5py
 import pandas as pd
@@ -166,7 +165,7 @@ class Application:
 class ApplicationSuite:
     """A applicationsuite is a combined set of application objects."""
 
-    applications: Dict[str, Application] = field(default_factory=dict)
+    applications: dict[str, Application] = field(default_factory=dict)
 
     def __post_init__(self):
         for application in self.applications.values():

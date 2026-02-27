@@ -9,7 +9,6 @@ __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -29,12 +28,12 @@ class Covariance(pd.DataFrame):
         return Covariance
 
     @property
-    def nuclide(self) -> Optional[str]:
+    def nuclide(self) -> str | None:
         """Return a string representation of the isotope based on ZAI."""
         return zam2nuclide(self.zai)
 
     @classmethod
-    def from_hdf5(cls, file_path: str, zai: int, mts: Optional[List[int]] = None) -> "Covariance":
+    def from_hdf5(cls, file_path: str, zai: int, mts: list[int] | None = None) -> "Covariance":
         """
         Load a covariance matrix from HDF5 and reconstruct from sparse storage.
 
@@ -76,7 +75,7 @@ class Covariance(pd.DataFrame):
             return obj
 
     @staticmethod
-    def _reconstruct_index(store: pd.HDFStore, zai_str: str, attrs) -> Union[pd.Index, pd.MultiIndex]:
+    def _reconstruct_index(store: pd.HDFStore, zai_str: str, attrs) -> pd.Index | pd.MultiIndex:
         """
         Rebuild the pandas index from stored HDF5 levels.
         """
@@ -88,8 +87,8 @@ class Covariance(pd.DataFrame):
 
     @staticmethod
     def _assemble_matrix(
-        sparse_data: pd.DataFrame, index: pd.Index, original_shape: Tuple[int, int], mts: Optional[List[int]]
-    ) -> Tuple[np.ndarray, pd.Index]:
+        sparse_data: pd.DataFrame, index: pd.Index, original_shape: tuple[int, int], mts: list[int] | None
+    ) -> tuple[np.ndarray, pd.Index]:
         """
         Filter sparse coordinates and expand to a symmetric dense matrix.
         """
@@ -195,7 +194,7 @@ class CovarianceSuite:
 
     @classmethod
     def from_hdf5(
-        cls, file_path: str, zais: Optional[List[int]] = None, mts: Optional[List[int]] = None
+        cls, file_path: str, zais: list[int] | None = None, mts: list[int] | None = None
     ) -> "CovarianceSuite":
         """
         Load a suite from an HDF5 file.
@@ -228,7 +227,7 @@ class CovarianceSuite:
         return cls.from_dict(covs)
 
     @classmethod
-    def from_dict(cls, items: Dict[int, Covariance]) -> "CovarianceSuite":
+    def from_dict(cls, items: dict[int, Covariance]) -> "CovarianceSuite":
         """
         Construct a suite from a dictionary of independent Covariance objects.
 

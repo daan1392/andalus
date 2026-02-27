@@ -15,7 +15,9 @@ maintainers = [
 ]
 classifiers = [
     "Typing :: Typed",
-    # TODO: Add additional classifiers as needed
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 license = {text = "MIT"}
 dependencies = [
@@ -30,7 +32,7 @@ dependencies = [
   "setuptools", # Because serpentTools does not have distutils
   "tables"
 ]
-requires-python = ">= 3.08, <3.13" # serpentTools is not compatible with >3.13
+requires-python = ">= 3.10, <3.13" # serpentTools is not compatible with >3.13
 
 [dependency-groups]
 dev = [
