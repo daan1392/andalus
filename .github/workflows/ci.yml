@@ -92,6 +92,11 @@ jobs:
       - name: Combine coverage
         run: uv run coverage combine
 
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Coverage report
         run: |
           echo '## Coverage Report' >> $GITHUB_STEP_SUMMARY
