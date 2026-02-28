@@ -1,32 +1,37 @@
-# ANDALUS
+<p align="center">
+  <img src="https://img.shields.io/pypi/v/andalus.svg" />
+  <a href="https://github.com/daan1392/andalus/actions/workflows/ci.yml">
+    <img src="https://github.com/daan1392/andalus/actions/workflows/ci.yml/badge.svg" />
+  </a>
+  <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue" />
+  <a href="https://codecov.io/gh/daan1392/andalus">
+    <img src="https://codecov.io/gh/daan1392/andalus/graph/badge.svg" />
+  </a>
+</p>
 
-![PyPI version](https://img.shields.io/pypi/v/andalus.svg)
-[![CI Status](https://github.com/daan1392/andalus/actions/workflows/ci.yml/badge.svg)](https://github.com/daan1392/andalus/actions/workflows/ci.yml)
-![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
-[![Coverage Status](https://codecov.io/gh/daan1392/andalus/graph/badge.svg)](https://codecov.io/gh/daan1392/andalus)
+<h1 align="center">ANDALUS</h1>
+
+
+<h3 align="center">Applied Nuclear Data Assimilation using Least sqUareS</h5>
 
 Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Source data assimilation tool for improving predictions of nuclear applications.
 
 * Created by **[Daan Houben](https://github.com/daan1392)**
   * PyPI: https://pypi.org/user/daan1392/
 * PyPI package: https://pypi.org/project/andalus/
-* Free software: MIT License
 
 ## Features
 
-* TODO
+* Perform sensitivity and uncertainty quantification suing first order approximation.
+* Use the Generalized Linear Least Squares equation to infer multi-group nuclear data.
 
 ## Documentation
 
-Documentation is built with [Zensical](https://zensical.org/) and deployed to GitHub Pages.
+Documentation is built with [Sphynx](https://www.sphinx-doc.org) and deployed to GitHub Pages.
 
 * **Live site:** https://daan1392.github.io/andalus/
 * **Preview locally:** `just docs-serve` (serves at http://localhost:8000)
 * **Build:** `just docs-build`
-
-API documentation is auto-generated from docstrings using [mkdocstrings](https://mkdocstrings.github.io/).
-
-Docs deploy automatically on push to `main` via GitHub Actions. To enable this, go to your repo's Settings > Pages and set the source to **GitHub Actions**.
 
 ## Development
 
