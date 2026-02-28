@@ -17,19 +17,22 @@ type-check-concise:
 type-check-watch:
     uv run --python=3.12 ty check --watch .
 
+# Define a local temp directory for pytest to avoid Windows PermissionErrors
+pytest_temp := "C:/Users/dhouben/Documents/andalus_tmp"
+
 # Run all the formatting, linting, and testing commands
 qa:
     uv run --python=3.12 ruff format .
     uv run --python=3.12 ruff check . --fix
     uv run --python=3.12 ruff check --select I --fix .
     uv run --python=3.12 ty check --output-format=concise .
-    uv run --python=3.12 pytest .
+    uv run --python=3.12 pytest . --basetemp={{pytest_temp}}
 
 # Run all the tests for all the supported Python versions
 testall:
-    uv run --python=3.10 pytest
-    uv run --python=3.11 pytest
-    uv run --python=3.12 pytest
+    uv run --python=3.10 pytest --basetemp={{pytest_temp}}
+    uv run --python=3.11 pytest --basetemp={{pytest_temp}}
+    uv run --python=3.12 pytest --basetemp={{pytest_temp}}
 
 # Run all the tests, but allow for arguments to be passed
 test *ARGS:

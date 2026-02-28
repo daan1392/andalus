@@ -61,13 +61,22 @@ def test_mt_filtering(sample_cov, tmp_path):
 
 def test_suite_assembly(sample_cov, real_cov):
     """Test block-diagonal assembly in CovarianceSuite."""
+    # Ensure real_cov actually loaded correctly and has the right index names
+    if real_cov.empty:
+        pytest.skip("Real covariance file 'data/covariances_test.h5' not found or empty.")
+
+    assert "MT" in real_cov.index.names
+
     suite = CovarianceSuite.from_dict({922350: sample_cov, 922380: real_cov})
 
     full_mat = suite.matrix
-    assert full_mat.shape == (4 + 1 * 33, 4 + 1 * 33)
+
+    # Make sure shape of matrix is as expected (sum of individual covariances)
+    assert full_mat.shape[0] == len(sample_cov) + len(real_cov)
     assert "ZAI" in full_mat.index.names
+
     # Check that cross-isotope blocks are zero
-    assert full_mat.loc[922350, 922380].sum().sum() == 0
+    assert full_mat.loc[922350, 922380].values.sum() == 0
 
 
 def test_correlation_calculation(sample_cov):

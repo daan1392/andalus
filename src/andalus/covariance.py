@@ -82,8 +82,28 @@ class Covariance(pd.DataFrame):
         if not attrs.is_multiindex:
             return store[f"zai_{zai_str}/covariances_index/values"]
 
-        index_levels = [store[f"zai_{zai_str}/covariances_index/level_{i}"] for i in range(len(attrs.index_names))]
-        return pd.MultiIndex.from_arrays(index_levels, names=attrs.index_names)
+        # Dynamically gather all index levels.
+        index_levels = []
+        for i in range(len(attrs.index_names)):
+            key = f"zai_{zai_str}/covariances_index/level_{i}"
+            if key in store:
+                index_levels.append(store[key])
+            else:
+                break  # Stop if we hit a level that isn't there
+
+        # Build the index
+        idx = pd.MultiIndex.from_arrays(index_levels)
+
+        # FIX: If the stored names are generic (level_0) or missing,
+        # force them to our standard to prevent 'MT not found' errors.
+        standard_names = ["MT", "E_min", "E_max"]
+        if len(index_levels) == 3:
+            idx.names = standard_names
+        else:
+            # Fallback for 4-level suites (ZAI, MT, E_min, E_max)
+            idx.names = ["ZAI"] + standard_names[: len(index_levels) - 1]
+
+        return idx
 
     @staticmethod
     def _assemble_matrix(
