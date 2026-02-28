@@ -50,7 +50,8 @@ dmypy.json
 .pytype/
 
 # Documentation build output
-site/
+docs/_build/
+_build/
 
 # IDE files
 # .idea/

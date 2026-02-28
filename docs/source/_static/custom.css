@@ -1,0 +1,36 @@
+/* docs/source/_static/custom.css */
+
+/* 1. The Main Sidebar Background */
+.wy-nav-side {
+    background: #555132 !important;
+}
+
+/* 2. The Search Area (Top of Sidebar) */
+.wy-side-nav-search {
+    background: #555132 !important;
+}
+
+/* 3. The Search Input Box itself (optional, for better contrast) */
+.wy-side-nav-search input[type="text"] {
+    border-color: #555132 !important;
+}
+
+/* 4. Active/Selected Menu Item Background */
+.wy-menu-vertical li.current > a {
+    background: #E86100 !important;
+    color: white !important;
+}
+
+/* 5. Links and Breadcrumbs */
+a {
+    color: #E86100 !important;
+}
+
+a:hover {
+    color: #E86100 !important;
+}
+
+/* 6. Top Navigation Bar (Mobile view) */
+.wy-nav-top {
+    background: #555132 !important;
+}

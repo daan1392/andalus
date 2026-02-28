@@ -56,11 +56,11 @@ coverage:
 # Serve docs locally with live reload
 docs-serve:
     -lsof -ti :8000 | xargs kill
-    uv run --group docs zensical serve
+    uv run --group docs sphinx-autobuild docs/source docs/_build/html --port 8000 --open-browser
 
 # Build docs (strict mode, fails on warnings)
 docs-build:
-    uv run --group docs zensical build --clean
+    uv run --group docs sphinx-build -W --keep-going -b html docs/source docs/_build/html
 
 # Build the project, useful for checking that packaging is correct
 build:

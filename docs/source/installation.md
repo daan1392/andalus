@@ -24,12 +24,6 @@ You can either clone the public repository:
 git clone https://github.com/daan1392/andalus
 ```
 
-Or download the [tarball](https://github.com/daan1392/andalus/tarball/main):
-
-```sh
-curl -OJL https://github.com/daan1392/andalus/tarball/main
-```
-
 Once you have a copy of the source, you can install it with:
 
 ```sh

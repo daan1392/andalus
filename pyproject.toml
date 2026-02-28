@@ -51,8 +51,10 @@ typecheck = [
     "ty",
 ]
 docs = [
-    "zensical",
-    "mkdocstrings-python",
+    "sphinx>=8.0.0",
+    "myst-parser",
+    "sphinx-rtd-theme",
+    "sphinx-autobuild",
 ]
 
 [project.urls]
