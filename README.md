@@ -3,6 +3,7 @@
 ![PyPI version](https://img.shields.io/pypi/v/andalus.svg)
 [![CI Status](https://github.com/daan1392/andalus/actions/workflows/ci.yml/badge.svg)](https://github.com/daan1392/andalus/actions/workflows/ci.yml)
 ![Python Versions](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)
+[![Coverage Status](https://codecov.io/gh/daan1392/andalus/graph/badge.svg)](https://codecov.io/gh/daan1392/andalus)
 
 Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Source data assimilation tool for improving predictions of nuclear applications.
 
