@@ -352,6 +352,50 @@ class BenchmarkSuite:
 
         return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title) for title in titles})
 
+    @classmethod
+    def from_yaml(cls, path: str):
+        """Factory method to create a BenchmarkSuite instance from a YAML configuration file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the YAML configuration file.
+
+        Returns
+        -------
+        BenchmarkSuite
+            An instance of BenchmarkSuite populated with data from the YAML file.
+        """
+        import yaml
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        benchmarks = {}
+        for benchmark_config in config.get("benchmarks", []):
+            if "sens0_path" in benchmark_config and "results_path" in benchmark_config:
+                benchmark = Benchmark.from_serpent(
+                    title=benchmark_config["title"],
+                    m=benchmark_config["m"],
+                    dm=benchmark_config["dm"],
+                    sens0_path=benchmark_config["sens0_path"],
+                    results_path=benchmark_config["results_path"],
+                    kind=benchmark_config.get("kind", "keff"),
+                    materials=benchmark_config.get("materials"),
+                    zailist=benchmark_config.get("zailist"),
+                    pertlist=benchmark_config.get("pertlist"),
+                )
+                benchmarks[benchmark.title] = benchmark
+            elif "hdf5_path" in benchmark_config:
+                benchmark = Benchmark.from_hdf5(
+                    file_path=benchmark_config["hdf5_path"],
+                    title=benchmark_config["title"],
+                    kind=benchmark_config.get("kind", "keff"),
+                )
+                benchmarks[benchmark.title] = benchmark
+
+        return cls(benchmarks=benchmarks)
+
     def get(self, title: str) -> Benchmark | None:
         """
         Get a benchmark from the suite.
@@ -378,3 +422,10 @@ class BenchmarkSuite:
             Title of the benchmark to be removed.
         """
         self.benchmarks.pop(title, None)
+
+
+if __name__ == "__main__":
+    bmarks = BenchmarkSuite.from_yaml("data/config.yaml")
+    print(bmarks.s)
+    print(bmarks.ds)
+    print(bmarks.titles)

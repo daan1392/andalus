@@ -1,0 +1,28 @@
+# Global settings for the analysis
+covariances:
+  file_path: "c:/Users/dhouben/OneDrive - Studiecentrum voor Kernenergie/Documents/data/jeff_40/jeff40_ecco33.h5"
+  nuclear_data_library: "TEST"
+
+# List of benchmarks to be loaded into the BenchmarkSuite
+benchmarks:
+  - title: "HMF001"
+    description: "A bare sphere of highly enriched uranium."
+    m: 1.00000
+    dm: 0.00200
+    kind: "keff"
+    sens0_path: "data/hmf001.ser_sens0.m"
+    results_path: "data/hmf001.ser_res.m"
+
+  - title: "HMF002"
+    description: "A bare sphere of highly enriched uranium."
+    m: 1.00000
+    dm: 0.00200
+    kind: "keff"
+    sens0_path: "data/hmf001.ser_sens0.m"
+    results_path: "data/hmf001.ser_res.m"
+
+applications:
+  - title: "LFR"
+    description: "A prototype of a lead-cooled fast reactor"
+    sens0_path: "data/hmf001.ser_sens0.m"
+    results_path: "data/hmf001.ser_res.m"

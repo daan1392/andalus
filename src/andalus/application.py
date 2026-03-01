@@ -30,7 +30,7 @@ class Application:
     def __post_init__(self):
         if not isinstance(self.title, str):
             raise TypeError(f"Title '{self.title}' must be a string")
-        if self.kind not in ["keff"]:
+        if self.kind not in ["keff", "void"]:
             raise ValueError(f"Type '{self.kind}' not implemented.")
         if not isinstance(self.c, (int, float)):
             raise TypeError(f"Calculated value {self.c} must be a number")
@@ -87,6 +87,7 @@ class Application:
         sensitivity = Sensitivity.from_serpent(
             sens0_path=sens0_path,
             title=title,
+            kind=kind,
             materiallist=materials,
             zailist=zailist,
             pertlist=pertlist,
@@ -290,6 +291,48 @@ class ApplicationSuite:
                 titles = list(f[kind].keys())
 
         return cls(applications={title: Application.from_hdf5(file_path, title) for title in titles})
+
+    @classmethod
+    def from_yaml(cls, path: str):
+        """Factory method to create an ApplicationSuite instance from a YAML configuration file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the YAML configuration file.
+
+        Returns
+        -------
+        ApplicationSuite
+            An instance of ApplicationSuite populated with data from the YAML file.
+        """
+        import yaml
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        applications = {}
+        for application_config in config.get("applications", []):
+            if "sens0_path" in application_config and "results_path" in application_config:
+                application = Application.from_serpent(
+                    title=application_config["title"],
+                    sens0_path=application_config["sens0_path"],
+                    results_path=application_config["results_path"],
+                    kind=application_config.get("kind", "keff"),
+                    materials=application_config.get("materials"),
+                    zailist=application_config.get("zailist"),
+                    pertlist=application_config.get("pertlist"),
+                )
+                applications[application.title] = application
+            elif "hdf5_path" in application_config:
+                application = Application.from_hdf5(
+                    file_path=application_config["hdf5_path"],
+                    title=application_config["title"],
+                    kind=application_config.get("kind", "keff"),
+                )
+                applications[application.title] = application
+
+        return cls(applications=applications)
 
     def get(self, title: str) -> Application | None:
         """

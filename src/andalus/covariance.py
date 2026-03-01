@@ -270,7 +270,7 @@ class CovarianceSuite:
         parts = []
 
         for zai in sorted(items.keys()):
-            cov = items[zai].copy()
+            cov = pd.DataFrame(items[zai].copy())
 
             # Prepend ZAI to the index
             new_index = pd.MultiIndex.from_tuples(
@@ -282,7 +282,9 @@ class CovarianceSuite:
 
         # pd.concat handles block-diagonal alignment and zero-filling
         global_matrix = pd.concat(parts, axis=1).fillna(0)
-        return cls(matrix=global_matrix.sort_index(axis=0).sort_index(axis=1))
+        global_matrix.sort_index(axis=0, inplace=True)
+        global_matrix.sort_index(axis=1, inplace=True)
+        return cls(matrix=global_matrix)
 
     @classmethod
     def from_df(cls, df: pd.DataFrame) -> "CovarianceSuite":
@@ -301,6 +303,36 @@ class CovarianceSuite:
             A suite wrapping the provided DataFrame.
         """
         return cls(matrix=df)
+
+    @classmethod
+    def from_yaml(cls, path: str, zais: list[int], mts: list[int] | None = None) -> "CovarianceSuite":
+        """
+        Factory method to create a CovarianceSuite instance from a YAML configuration file.
+
+        Parameters
+        ----------
+        path : str
+            The path to the YAML configuration file, by default "assimilation_suite.yaml".
+        zais : list[int]
+            List of ZAI values to include in the suite.
+        mts : list[int]
+            List of MT values to include in the suite.
+
+        Returns
+        -------
+        CovarianceSuite
+            An instance of CovarianceSuite populated with data from the YAML file.
+        """
+        import yaml
+
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        covs = {}
+        for zai in zais:
+            covs[zai] = Covariance.from_hdf5(config["covariances"]["file_path"], zai=zai, mts=mts)
+
+        return cls.from_dict(covs)
 
     def get_uncertainties(self) -> pd.Series:
         """
