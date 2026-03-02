@@ -39,7 +39,7 @@ To set up for local development:
 
 ```bash
 # Clone your fork
-git clone git@github.com:your_username/andalus.git
+git clone git@github.com:daan1392/andalus.git
 cd andalus
 
 # Install in editable mode with live updates
