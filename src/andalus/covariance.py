@@ -8,7 +8,6 @@ __all__ = ["Covariance", "CovarianceSuite"]
 __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
-import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -36,7 +35,10 @@ class Covariance(pd.DataFrame):
     def is_unrealistic_uncertainty(self, threshold=10):
         """Check if diagonal elements (variances) exceed a threshold."""
         if np.diag(self.values).max() > threshold:
-            print(f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly too large.")
+            print(
+                f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly"
+                " too large, returning an empty Covariance instead."
+            )
             return True
         else:
             return False
@@ -86,14 +88,14 @@ class Covariance(pd.DataFrame):
 
         # 4. Object Initialization
         obj = cls(
-            matrix, 
-            index=final_index, 
-            columns=final_index, 
+            matrix,
+            index=final_index,
+            columns=final_index,
         )
         obj.zai = zai
         obj.temperature = getattr(attrs, "temperature", None)
         obj.err = getattr(attrs, "err", None)
-        
+
         if obj.is_unrealistic_uncertainty():
             return cls()
         else:
@@ -287,8 +289,7 @@ class CovarianceSuite:
                 zai = int(key_name.split("_")[1])
                 if zais is not None and zai not in zais:
                     continue
-                
-                print(f"Reading covariance for ZAI: {zai}")
+
                 covs[zai] = Covariance.from_store(store, zai=zai, mts=mts)
 
         return cls.from_dict(covs)
@@ -367,6 +368,7 @@ class CovarianceSuite:
             An instance of CovarianceSuite populated with data from the YAML file.
         """
         import yaml
+
         with open(path) as f:
             config = yaml.safe_load(f)
 
