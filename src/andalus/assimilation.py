@@ -22,17 +22,61 @@ class AssimilationSuite:
 
     @property
     def s(self):
-        """Concatenate sensitivity data from all benchmarks and applications into
-        a single DataFrame.
         """
-        return pd.concat([self.benchmarks.s, self.applications.s], axis=1).fillna(0.0)
+        Concatenate sensitivity data from all benchmarks and applications.
+
+        This property gathers sensitivity vectors from available benchmark and 
+        application suites, aligns them by their MultiIndex, and fills missing 
+        values with zeros to create a unified sensitivity matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            A combined DataFrame containing sensitivities, aligned along the 
+            columns (axis=1).
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        if self.benchmarks is None and self.applications:
+            return self.applications.s
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.s
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.s, self.applications.s], axis=1).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
 
     @property
     def ds(self):
-        """Concatenate uncertainties on the sensitivity profiles from all benchmarks
-        and applications into a single DataFrame.
         """
-        return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
+        Concatenate sensitivity uncertainties data from all benchmarks and applications.
+
+        This property gathers sensitivity uncertainty vectors from available benchmark 
+        and application suites, aligns them by their MultiIndex, and fills missing 
+        values with zeros to create a unified sensitivity uncertainty matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            A combined DataFrame containing sensitivity uncertainties, aligned 
+            along the columns (axis=1).
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        if self.benchmarks is None and self.applications:
+            return self.applications.ds
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.ds
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
 
     @classmethod
     def from_yaml(cls, path: str = "assimilation_suite.yaml"):
