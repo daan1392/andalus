@@ -8,6 +8,7 @@ __all__ = ["Covariance", "CovarianceSuite"]
 __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -19,9 +20,26 @@ from sandy.zam import zam2nuclide
 class Covariance(pd.DataFrame):
     """
     Subclass of pd.DataFrame for handling individual nuclide covariance data.
+
+    Attributes
+    ----------
+    zai : int
+        Nuclide identifier (ZAI).
+    temperature : float, optional
+        Temperature at which the covariance was generated.
+    err : float, optional
+        Associated error or tolerance.
     """
 
     _metadata = ["zai", "temperature", "err"]
+
+    def is_unrealistic_uncertainty(self, threshold=10):
+        """Check if diagonal elements (variances) exceed a threshold."""
+        if np.diag(self.values).max() > threshold:
+            print(f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly too large.")
+            return True
+        else:
+            return False
 
     @property
     def _constructor(self):
@@ -31,6 +49,55 @@ class Covariance(pd.DataFrame):
     def nuclide(self) -> str | None:
         """Return a string representation of the isotope based on ZAI."""
         return zam2nuclide(self.zai)
+
+    @classmethod
+    def from_store(cls, store: pd.HDFStore, zai: int, mts: list[int] | None = None) -> "Covariance":
+        """
+        Extract and reconstruct a Covariance object from an open HDFStore.
+
+        Parameters
+        ----------
+        store : pd.HDFStore
+            The open HDF5 store object.
+        zai : int
+            Nuclide identifier (ZAI).
+        mts : list of int, optional
+            Filter for specific MT numbers.
+
+        Returns
+        -------
+        Covariance
+            Reconstructed symmetric covariance matrix.
+        """
+        zai_str = str(zai)
+        key = f"zai_{zai_str}/covariances/data"
+        if key not in store:
+            return cls()
+
+        # 1. Component Extraction
+        sparse_data = store[key]
+        attrs = store.get_storer(key).attrs
+
+        # 2. Index Reconstruction
+        index = cls._reconstruct_index(store, zai_str, attrs)
+
+        # 3. Filtering and Matrix Assembly
+        matrix, final_index = cls._assemble_matrix(sparse_data, index, attrs.shape, mts)
+
+        # 4. Object Initialization
+        obj = cls(
+            matrix, 
+            index=final_index, 
+            columns=final_index, 
+        )
+        obj.zai = zai
+        obj.temperature = getattr(attrs, "temperature", None)
+        obj.err = getattr(attrs, "err", None)
+        
+        if obj.is_unrealistic_uncertainty():
+            return cls()
+        else:
+            return obj
 
     @classmethod
     def from_hdf5(cls, file_path: str, zai: int, mts: list[int] | None = None) -> "Covariance":
@@ -51,28 +118,8 @@ class Covariance(pd.DataFrame):
         Covariance
             Reconstructed symmetric covariance matrix.
         """
-        zai_str = str(zai)
         with pd.HDFStore(file_path, mode="r") as store:
-            key = f"zai_{zai_str}/covariances/data"
-            if key not in store:
-                return cls()
-
-            # 1. Component Extraction
-            sparse_data = store[key]
-            attrs = store.get_storer(key).attrs
-
-            # 2. Index Reconstruction
-            index = cls._reconstruct_index(store, zai_str, attrs)
-
-            # 3. Filtering and Matrix Assembly
-            matrix, final_index = cls._assemble_matrix(sparse_data, index, attrs.shape, mts)
-
-            # 4. Object Initialization
-            obj = cls(matrix, index=final_index, columns=final_index)
-            obj.zai = zai
-            obj.temperature = getattr(attrs, "temperature", None)
-            obj.err = getattr(attrs, "err", None)
-            return obj
+            return cls.from_store(store, zai, mts)
 
     @staticmethod
     def _reconstruct_index(store: pd.HDFStore, zai_str: str, attrs) -> pd.Index | pd.MultiIndex:
@@ -235,14 +282,14 @@ class CovarianceSuite:
         """
         covs = {}
         with pd.HDFStore(file_path, mode="r") as store:
-            zai_keys = [key for key in store.keys() if key.startswith("/zai_")]
-            for zai_key in zai_keys:
-                zai = int(zai_key.split("/")[1].split("_")[1])
+            zai_keys = {key.split("/")[1] for key in store.keys() if key.startswith("/zai_")}
+            for key_name in zai_keys:
+                zai = int(key_name.split("_")[1])
                 if zais is not None and zai not in zais:
                     continue
-
-                cov = Covariance.from_hdf5(file_path, zai=zai, mts=mts)
-                covs[zai] = cov
+                
+                print(f"Reading covariance for ZAI: {zai}")
+                covs[zai] = Covariance.from_store(store, zai=zai, mts=mts)
 
         return cls.from_dict(covs)
 
@@ -268,11 +315,8 @@ class CovarianceSuite:
             return cls(pd.DataFrame())
 
         parts = []
-
         for zai in sorted(items.keys()):
             cov = pd.DataFrame(items[zai].copy())
-
-            # Prepend ZAI to the index
             new_index = pd.MultiIndex.from_tuples(
                 [(zai,) + tup for tup in cov.index], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]
             )
@@ -280,7 +324,6 @@ class CovarianceSuite:
             cov.columns = new_index
             parts.append(cov)
 
-        # pd.concat handles block-diagonal alignment and zero-filling
         global_matrix = pd.concat(parts, axis=1).fillna(0)
         global_matrix.sort_index(axis=0, inplace=True)
         global_matrix.sort_index(axis=1, inplace=True)
@@ -324,15 +367,10 @@ class CovarianceSuite:
             An instance of CovarianceSuite populated with data from the YAML file.
         """
         import yaml
-
         with open(path) as f:
             config = yaml.safe_load(f)
 
-        covs = {}
-        for zai in zais:
-            covs[zai] = Covariance.from_hdf5(config["covariances"]["file_path"], zai=zai, mts=mts)
-
-        return cls.from_dict(covs)
+        return cls.from_hdf5(config["covariances"]["file_path"], zais=zais, mts=mts)
 
     def get_uncertainties(self) -> pd.Series:
         """

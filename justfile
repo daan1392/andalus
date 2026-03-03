@@ -37,7 +37,7 @@ testall:
 # Run all the tests, but allow for arguments to be passed
 test *ARGS:
     @echo "Running with arg: {{ARGS}}"
-    uv run --python=3.12 pytest {{ARGS}}
+    uv run --python=3.12 pytest --basetemp={{pytest_temp}} {{ARGS}}
 
 # Run all the tests, but on failure, drop into the debugger
 pdb *ARGS:

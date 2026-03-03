@@ -25,14 +25,14 @@ class AssimilationSuite:
         """
         Concatenate sensitivity data from all benchmarks and applications.
 
-        This property gathers sensitivity vectors from available benchmark and 
-        application suites, aligns them by their MultiIndex, and fills missing 
+        This property gathers sensitivity vectors from available benchmark and
+        application suites, aligns them by their MultiIndex, and fills missing
         values with zeros to create a unified sensitivity matrix.
 
         Returns
         -------
         pd.DataFrame
-            A combined DataFrame containing sensitivities, aligned along the 
+            A combined DataFrame containing sensitivities, aligned along the
             columns (axis=1).
 
         Raises
@@ -40,6 +40,7 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
+        # Do not concatenate if there are only benchmarks or applications.
         if self.benchmarks is None and self.applications:
             return self.applications.s
         elif self.applications is None and self.benchmarks:
@@ -54,14 +55,14 @@ class AssimilationSuite:
         """
         Concatenate sensitivity uncertainties data from all benchmarks and applications.
 
-        This property gathers sensitivity uncertainty vectors from available benchmark 
-        and application suites, aligns them by their MultiIndex, and fills missing 
+        This property gathers sensitivity uncertainty vectors from available benchmark
+        and application suites, aligns them by their MultiIndex, and fills missing
         values with zeros to create a unified sensitivity uncertainty matrix.
 
         Returns
         -------
         pd.DataFrame
-            A combined DataFrame containing sensitivity uncertainties, aligned 
+            A combined DataFrame containing sensitivity uncertainties, aligned
             along the columns (axis=1).
 
         Raises
@@ -105,10 +106,16 @@ class AssimilationSuite:
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
 
     def ck_matrix(self) -> pd.DataFrame:
-        """Generate a ck-similarity matrix for the current assimilation suite."""
+        """Generate a ck-similarity matrix for the current assimilation suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            A dataframe containing the similarity coefficients between
+            all benchmarks and applications in the AssimilationSuite.
+        """
         cov = sandwich(self.s, self.covariances.matrix, self.s)
         var = np.diag(cov)
-
         return cov.div(np.sqrt(var), axis=0).div(np.sqrt(var), axis=1)
 
     def ck_target(self, target: str) -> pd.Series:
