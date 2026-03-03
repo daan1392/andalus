@@ -6,7 +6,7 @@ __all__ = ["Benchmark", "BenchmarkSuite"]
 __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import h5py
 import numpy as np
@@ -189,6 +189,37 @@ class BenchmarkSuite:
         for benchmark in self.benchmarks.values():
             if not isinstance(benchmark, Benchmark):
                 raise TypeError(f"Benchmark {benchmark.title} is not a Benchmark object")
+
+    def __getitem__(self, key):
+        return self.benchmarks[key]
+
+    def __iter__(self):
+        return iter(self.benchmarks.values())
+
+    def __len__(self):
+        return len(self.benchmarks)
+
+    def __contains__(self, key):
+        return key in self.benchmarks
+
+    def items(self):
+        """
+        Return the suite's benchmarks as (title, Benchmark) pairs.
+
+        Returns
+        -------
+        dict_items
+            A view of the internal benchmarks dictionary items.
+        """
+        return self.benchmarks.items()
+
+    def values(self):
+        """Return an iterator over the benchmark objects."""
+        return self.benchmarks.values()
+
+    def keys(self):
+        """Return an iterator over the benchmark titles."""
+        return self.benchmarks.keys()
 
     @property
     def titles(self) -> list:
@@ -422,6 +453,31 @@ class BenchmarkSuite:
             Title of the benchmark to be removed.
         """
         self.benchmarks.pop(title, None)
+
+    def update_c(self, new_c: pd.Series) -> "BenchmarkSuite":
+        """
+        Create a new BenchmarkSuite with updated calculated values.
+
+        This method is typically used to generate a posterior suite after
+        an assimilation update (e.g., GLLS).
+
+        Parameters
+        ----------
+        new_c : pd.Series
+            A series containing the updated 'c' values, indexed by
+            benchmark title.
+
+        Returns
+        -------
+        BenchmarkSuite
+            A new instance of the suite containing updated Benchmark objects.
+
+        Raises
+        ------
+        KeyError
+            If a benchmark title in the suite is missing from the index of `new_c`.
+        """
+        return BenchmarkSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.benchmarks.items()})
 
 
 if __name__ == "__main__":

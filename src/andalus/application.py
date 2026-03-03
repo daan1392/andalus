@@ -6,7 +6,7 @@ __all__ = ["Application", "ApplicationSuite"]
 __version__ = "0.1.1"
 __author__ = "Daan Houben"
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import h5py
 import pandas as pd
@@ -172,6 +172,38 @@ class ApplicationSuite:
         for application in self.applications.values():
             if not isinstance(application, Application):
                 raise TypeError(f"Application {application.title} is not an Application object")
+
+    def __getitem__(self, key):
+        return self.applications[key]
+
+    def __iter__(self):
+        return iter(self.applications.values())
+
+    def __len__(self):
+        return len(self.applications)
+
+    def __contains__(self, key):
+        return key in self.applications
+
+    def items(self):
+        """
+        Return the suite's applications as (title, Application) pairs.
+
+        Returns
+        -------
+        dict_items
+            A view of the internal application dictionary items,
+            which are of type Application.
+        """
+        return self.applications.items()
+
+    def values(self):
+        """Return an iterator over the application objects."""
+        return self.applications.values()
+
+    def keys(self):
+        """Return an iterator over the application titles."""
+        return self.applications.keys()
 
     @property
     def titles(self) -> list:
@@ -361,6 +393,31 @@ class ApplicationSuite:
         """
         self.applications.pop(title, None)
 
+    def update_c(self, new_c: pd.Series) -> "ApplicationSuite":
+        """
+        Create a new ApplicationSuite with updated calculated values.
+
+        This method is typically used to generate a posterior suite after
+        an assimilation update (e.g., GLLS).
+
+        Parameters
+        ----------
+        new_c : pd.Series
+            A series containing the updated 'c' values, indexed by
+            application title.
+
+        Returns
+        -------
+        ApplicationSuite
+            A new instance of the suite containing updated Application objects.
+
+        Raises
+        ------
+        KeyError
+            If an applicaiton title in the suite is missing from the index of `new_c`.
+        """
+        return ApplicationSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.items()})
+
 
 if __name__ == "__main__":
     # Example usage
@@ -374,7 +431,3 @@ if __name__ == "__main__":
 
     app.s.plot_sensitivity(zais=[922380], perts=[2, 4])
     plt.show()
-
-    app.to_hdf5("application_data.h5")
-    loaded_app = Application.from_hdf5("application_data.h5", title="HMF001")
-    loaded_app.print_summary()

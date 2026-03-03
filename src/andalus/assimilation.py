@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
@@ -89,10 +89,12 @@ class AssimilationSuite:
 
         return ck_matrix[target].drop(labels=target)
 
-    def glls(self):
+    def glls(
+        self,
+    ):
         """Perform a GLLS update on the assimilation suite using the current sensitivity
-        profiles and covariance data. This method updates the sensitivity profiles in
-        the benchmarks and applications based on the GLLS formula.
+        profiles and covariance data. This method updates the calculated response and the
+        covariance matrices.
 
         Returns
         -------
@@ -101,28 +103,55 @@ class AssimilationSuite:
         """
 
         # Calculate prior covariance matrix of the benchmarks
-        # cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
+        cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
-        # # Propagate the uncertainty on the sensitivity profiles
+        # Propagate the uncertainty on the sensitivity profiles
         # cov_ds = sandwich(self.benchmarks.ds, self.covariances.matrix, self.benchmarks.ds)
 
         # Calculate inverse of the precision matrix
-        # C = np.linalg.pinv(cov_prior + np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2) + cov_ds)
+        C_inv = pd.DataFrame(
+            np.linalg.pinv(cov_prior + np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)),
+            cov_prior.columns,
+            cov_prior.index,
+        )
 
-        # # Calculate difference between experimental and calculated values
-        # b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+        # Calculate difference between experimental and calculated values
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
 
-        # TODO implement GLLS update formulas
+        idx = self.benchmarks.s.index.intersection(self.covariances.matrix.index)
+        A = self.covariances.matrix.loc[idx, idx] @ self.benchmarks.s.loc[idx]
 
-        raise NotImplementedError("GLLS update method is not yet implemented.")
+        dx = A @ C_inv @ b
+        Vx_post = self.covariances.matrix.loc[idx, idx] - A @ C_inv @ A.T
+
+        c_ = self.benchmarks.c + self.benchmarks.s.loc[idx].T @ dx.loc[idx] * self.benchmarks.c
+        c_a = self.applications.c + self.applications.s.loc[idx].T @ dx.loc[idx] * self.applications.c
+        # Vc_post = self.benchmarks.s.loc[idx].T @ Vx_post.loc[idx, idx] @ self.benchmarks.s.loc[idx]
+
+        post_bench = {}
+        for title, bm in self.benchmarks.items():
+            bm_ = replace(bm, c=c_.loc[title])
+            post_bench[title] = bm_
+
+        post_app = {}
+        for title, am in self.applications.items():
+            am_ = replace(am, c=c_a.loc[title])
+            post_app[title] = am_
+
+        posteriorSuite = AssimilationSuite(
+            benchmarks=BenchmarkSuite(post_bench),
+            applications=ApplicationSuite(post_app),
+            covariances=CovarianceSuite.from_df(Vx_post),
+        )
+
+        return posteriorSuite
 
 
 if __name__ == "__main__":
     assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
-    print(assimilation_suite.s)
-    print(assimilation_suite.ck_target("LFR"))
-    # print(assimilation_suite.ck_target("LFR"))
-    # print(f"index sensitivities: {assimilation_suite.s.index}")
-    # print(f"index covariances: {assimilation_suite.covariances.matrix.index}")
-    # # 1. Check if the index is unique
-    # print(f"Is Covariance Index unique?: {assimilation_suite.s.index.is_unique}")
+
+    print(assimilation_suite.ck_matrix())
+
+    posterior_assimilation_suite = assimilation_suite.glls()
+
+    print(posterior_assimilation_suite.ck_matrix())

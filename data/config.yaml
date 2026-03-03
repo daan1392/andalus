@@ -13,16 +13,16 @@ benchmarks:
     sens0_path: "data/hmf001.ser_sens0.m"
     results_path: "data/hmf001.ser_res.m"
 
-  - title: "HMF002"
+  - title: "HMF002-001"
     description: "A bare sphere of highly enriched uranium."
     m: 1.00000
     dm: 0.00200
     kind: "keff"
-    sens0_path: "data/hmf001.ser_sens0.m"
-    results_path: "data/hmf001.ser_res.m"
+    sens0_path: "data/hmf002-001.ser_sens0.m"
+    results_path: "data/hmf002-001.ser_res.m"
 
 applications:
-  - title: "LFR"
+  - title: "HMF002-002"
     description: "A prototype of a lead-cooled fast reactor"
-    sens0_path: "data/hmf001.ser_sens0.m"
-    results_path: "data/hmf001.ser_res.m"
+    sens0_path: "data/hmf002-002.ser_sens0.m"
+    results_path: "data/hmf002-002.ser_res.m"

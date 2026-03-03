@@ -237,7 +237,7 @@ class CovarianceSuite:
         with pd.HDFStore(file_path, mode="r") as store:
             zai_keys = [key for key in store.keys() if key.startswith("/zai_")]
             for zai_key in zai_keys:
-                zai = int(zai_key.split("/")[2].split("_")[1])
+                zai = int(zai_key.split("/")[1].split("_")[1])
                 if zais is not None and zai not in zais:
                     continue
 

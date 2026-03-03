@@ -1,5 +1,5 @@
 """Top-level package for ANDALUS."""
 
-from andalus import application, benchmark, covariance, sensitivity
+from andalus import application, assimilation, benchmark, covariance, sensitivity
 
-__all__ = ["benchmark", "sensitivity", "application", "covariance"]
+__all__ = ["benchmark", "sensitivity", "application", "covariance", "assimilation"]
