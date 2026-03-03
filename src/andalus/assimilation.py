@@ -133,9 +133,7 @@ class AssimilationSuite:
 
         return ck_matrix[target].drop(labels=target)
 
-    def glls(
-        self,
-    ):
+    def glls(self):
         """Perform a GLLS update on the assimilation suite using the current sensitivity
         profiles and covariance data. This method updates the calculated response and the
         covariance matrices.
@@ -172,15 +170,17 @@ class AssimilationSuite:
         c_a = self.applications.c + self.applications.s.loc[idx].T @ dx.loc[idx] * self.applications.c
         # Vc_post = self.benchmarks.s.loc[idx].T @ Vx_post.loc[idx, idx] @ self.benchmarks.s.loc[idx]
 
+        # Initialize new benchmarkSuite with updated calculation values
         post_bench = {}
         for title, bm in self.benchmarks.items():
             bm_ = replace(bm, c=c_.loc[title])
             post_bench[title] = bm_
 
+        # Initialize new applicationSuite with updated calculated values
         post_app = {}
-        for title, am in self.applications.items():
-            am_ = replace(am, c=c_a.loc[title])
-            post_app[title] = am_
+        for title, app in self.applications.items():
+            app_ = replace(app, c=c_a.loc[title])
+            post_app[title] = app_
 
         posteriorSuite = AssimilationSuite(
             benchmarks=BenchmarkSuite(post_bench),
