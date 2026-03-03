@@ -32,17 +32,6 @@ class Covariance(pd.DataFrame):
 
     _metadata = ["zai", "temperature", "err"]
 
-    def is_unrealistic_uncertainty(self, threshold=10):
-        """Check if diagonal elements (variances) exceed a threshold."""
-        if np.diag(self.values).max() > threshold:
-            print(
-                f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly"
-                " too large, returning an empty Covariance instead."
-            )
-            return True
-        else:
-            return False
-
     @property
     def _constructor(self):
         return Covariance
@@ -242,6 +231,16 @@ class Covariance(pd.DataFrame):
         outer_std = np.outer(diag, diag)
         corr_values = self.values / outer_std
         return pd.DataFrame(corr_values, index=self.index, columns=self.columns).fillna(0)
+    
+    def is_unrealistic_uncertainty(self, threshold=10):
+        """Check if diagonal elements (variances) exceed a threshold."""
+        if np.diag(self.values).max() > threshold:
+            print(
+                f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly"
+                " too large, returning an empty Covariance instead."
+            )
+            return True
+        return False
 
 
 @dataclass
