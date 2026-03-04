@@ -17,10 +17,22 @@ from andalus.sensitivity import Sensitivity
 
 @dataclass(frozen=True)
 class Application:
-    """An application is a calculation without an associated measurement.
-    It can be used to predict the value of an observable for a given set of parameters.
     """
+    An application is a calculation without an associated measurement.
 
+    Attributes
+    ----------
+    title : str
+        The unique name or identifier for the application.
+    kind : str
+        The kind of the observable (e.g., "keff", "void").
+    c : float
+        The calculated value (Nominal).
+    dc : float
+        The uncertainty of the calculation.
+    s : Sensitivity
+        The energy-dependent sensitivity profiles.
+    """
     title: str
     kind: str
     c: float

@@ -18,7 +18,26 @@ from andalus.sensitivity import Sensitivity
 
 @dataclass(frozen=True)
 class Benchmark:
-    "A benchmark is an experiment that has an associated measurement."
+    """
+    A benchmark is an application that has an associated measurement.
+
+    Attributes
+    ----------
+    title : str
+        The unique name or identifier for the application.
+    kind : str
+        The kind of the observable (e.g., "keff", "void").
+    m : float
+        The measured value (Nominal).
+    dm : float
+        The uncertainty of the measurement.
+    c : float
+        The calculated value (Nominal).
+    dc : float
+        The uncertainty of the calculation.
+    s : Sensitivity
+        The energy-dependent sensitivity profiles.
+    """
 
     title: str
     kind: str
