@@ -186,6 +186,7 @@ class AssimilationSuite:
         # Vc_post = self.benchmarks.s.loc[idx].T @ Vx_post.loc[idx, idx] @ self.benchmarks.s.loc[idx]
 
         # Initialize new benchmarkSuite with updated calculation values
+        # TODO: Possiblity to add a PosteriorSuite which contains posterior nuclear data and biases.
         post_bench = {}
         for title, bm in self.benchmarks.items():
             bm_ = replace(bm, c=c_.loc[title])

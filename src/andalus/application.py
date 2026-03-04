@@ -177,7 +177,13 @@ class Application:
 
 @dataclass
 class ApplicationSuite:
-    """A applicationsuite is a combined set of application objects."""
+    """A applicationsuite is a combined set of application objects.
+    
+    Attributes
+    ----------
+    applications : dict[str, Application]
+        A dictionary of application objects, indexed by their title.
+    """
 
     applications: dict[str, Application] = field(default_factory=dict)
 

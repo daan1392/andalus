@@ -200,7 +200,13 @@ class Benchmark:
 
 @dataclass
 class BenchmarkSuite:
-    """A benchmarksuite is a combined set of benchmark objects."""
+    """A benchmarksuite is a combined set of benchmark objects.
+    
+    Attributes
+    ----------
+    benchmarks : dict[str, Benchmark]
+        A dictionary of benchmark objects, indexed by their title.
+    """
 
     benchmarks: dict[str, Benchmark] = field(default_factory=dict)
 
