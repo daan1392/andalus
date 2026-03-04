@@ -20,4 +20,5 @@ Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Sourc
    theory
    installation
    usage
+   examples
    api/modules 

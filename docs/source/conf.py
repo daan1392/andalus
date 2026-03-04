@@ -19,6 +19,9 @@ extensions = [
     "sphinx.ext.napoleon",  # Supports Google/NumPy style docstrings
     "sphinx.ext.viewcode",  # Adds links to the highlighted source code
     "myst_parser",  # Markdown support
+    "nbsphinx",  # Jupyter Notebook support
+    "sphinx.ext.mathjax",  # For rendering formulas in notebooks
+    "sphinx_collections",  # For collecting examples and tutorials
 ]
 
 source_suffix = {
@@ -26,8 +29,21 @@ source_suffix = {
     ".md": "markdown",
 }
 
+collections = {
+    "examples_gallery": {
+        "driver": "copy_folder",
+        "source": "examples/",
+        "target": "examples/",
+        "ignore": ["*.py", ".sh"],
+    }
+}
+
+collections_final_clean = False
+
+python_use_unqualified_type_names = True
+
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 
 # -- Options for HTML output -------------------------------------------------
