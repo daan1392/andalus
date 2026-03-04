@@ -402,6 +402,48 @@ class CovarianceSuite:
         corr = self.matrix / outer_std
         return corr.fillna(0)
 
+    def plot_uncertainty(self, zai: int, mt: int, ax=None, **kwargs):
+        """
+        Plot the uncertainty (standard deviation) for a specific ZAI and MT.
+
+        Parameters
+        ----------
+        zai : int
+            The ZAI of the nuclide to plot.
+        mt : int
+            The MT number to plot.
+        ax : matplotlib.axes.Axes, optional
+            An existing matplotlib Axes to plot on. If None, a new figure will be created.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The Axes object containing the plot.
+        """
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(5, 4), layout="constrained")
+
+        mask = (self.matrix.index.get_level_values("ZAI") == zai) & (self.matrix.index.get_level_values("MT") == mt)
+        uncertainties = self.get_uncertainties()[mask]
+
+        e_min = uncertainties.index.get_level_values("E_min_eV")
+
+        ax.step(
+            e_min,
+            uncertainties.values * 100,
+            where="post",
+            **kwargs,
+        )
+
+        ax.set(
+            xlabel="Energy, eV",
+            ylabel="Standard Deviation, %",
+            xscale="log",
+        )
+        return ax
+
 
 if __name__ == "__main__":
     # covs = {}

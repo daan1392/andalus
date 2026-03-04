@@ -21,6 +21,102 @@ class AssimilationSuite:
     covariances: CovarianceSuite
 
     @property
+    def titles(self):
+        """Get a list of all case titles in the assimilation suite, including both
+        benchmarks and applications.
+
+        Returns
+        -------
+        list
+            A list of strings representing the titles of all cases in the suite.
+        """
+        benchmark_titles = self.benchmarks.titles if self.benchmarks else []
+        application_titles = self.applications.titles if self.applications else []
+        return benchmark_titles + application_titles
+
+    @property
+    def m(self):
+        """Return experimental values from the benchmark suite.
+
+        Returns
+        -------
+        pd.Series
+            A Series containing the experimental values from the benchmark suite.
+        """
+        if self.benchmarks is not None:
+            return self.benchmarks.m
+        else:
+            raise ValueError("No benchmarks in the assimilation suite.")
+
+    @property
+    def dm(self):
+        """Return experimental uncertainty values from the benchmark suite.
+
+        Returns
+        -------
+        pd.Series
+            A Series containing the experimental uncertainty values from the benchmark suite.
+        """
+        if self.benchmarks is not None:
+            return self.benchmarks.dm
+        else:
+            raise ValueError("No benchmarks in the assimilation suite.")
+
+    @property
+    def c(self):
+        """Concatenate calculated values from all benchmarks and applications.
+
+        This property gathers calculated values from available benchmark and
+        application suites, aligns them by their titles, and fills missing
+        values with zeros to create a unified calculated value vector.
+
+        Returns
+        -------
+        pd.Series
+            A combined Series containing calculated values, aligned by index.
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        if self.benchmarks is None and self.applications:
+            return self.applications.c
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.c
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.c, self.applications.c], axis=0).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    @property
+    def dc(self):
+        """Concatenate calculated value uncertainties from all benchmarks and applications.
+
+        This property gathers calculated value uncertainties from available benchmark
+        and application suites, aligns them by their titles, and fills missing
+        values with zeros to create a unified calculated value uncertainty vector.
+
+        Returns
+        -------
+        pd.Series
+            A combined Series containing calculated value uncertainties, aligned by index.
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        if self.benchmarks is None and self.applications:
+            return self.applications.dc
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.dc
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.dc, self.applications.dc], axis=0).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    @property
     def s(self):
         """
         Concatenate sensitivity data from all benchmarks and applications.
@@ -78,6 +174,22 @@ class AssimilationSuite:
             return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
         else:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    def propagate_nuclear_data_uncertainty(self):
+        """Propagate the nuclear data uncertainty through the sensitivity profiles
+        to calculate the contribution of the nuclear data uncertainty to the
+        overall uncertainty in the calculated values.
+
+        Returns
+        -------
+        pd.Series
+            A Series containing the propagated nuclear data uncertainty for each case in the suite.
+        """
+        return pd.Series(
+            np.sqrt(np.diag(sandwich(self.s, self.covariances.matrix, self.s))),
+            index=self.titles,
+            name="uncertainty_from_nuclear_data",
+        )
 
     @classmethod
     def from_yaml(cls, path: str = "assimilation_suite.yaml"):

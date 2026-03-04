@@ -7,3 +7,4 @@ Explore these Jupyter Notebooks to see the package in action.
    :name: notebook-gallery
 
    _collections/examples/plot_serpent_sensitivity
+   _collections/examples/least_squares_adjustment
