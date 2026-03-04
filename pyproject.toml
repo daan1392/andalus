@@ -60,6 +60,7 @@ docs = [
     "ipykernel>=7.2.0",
     "sphinx-collections>=0.3.1",
     "pypandoc-binary>=1.16.2",
+    "pydata-sphinx-theme>=0.16.1",
 ]
 
 [project.urls]

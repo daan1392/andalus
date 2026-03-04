@@ -141,14 +141,22 @@ class AssimilationSuite:
         return ck_matrix[target].drop(labels=target)
 
     def glls(self):
-        """Perform a GLLS update on the assimilation suite using the current sensitivity
-        profiles and covariance data. This method updates the calculated response and the
-        covariance matrices.
+        """Perform a GLLS update [1] on the assimilation suite using the sensitivity
+        profiles and covariance data loaded in the AssimilationSuite. This method updates
+        the calculated response and the covariance matrices.
 
         Returns
         -------
         AssimilationSuite
             A new AssimilationSuite instance with updated sensitivity profiles.
+
+        References
+        ----------
+        .. [1] B. L. Broadhead, B. T. Rearden, C. M. Hopper, J. J. Wagschal, and C. V. Parks,
+         “Sensitivity- and Uncertainty-Based Criticality Safety Validation Techniques,”
+         Nuclear Science and Engineering, vol. 146, no. 3, pp. 340–366, Mar. 2004,
+         doi: 10.13182/NSE03-2.
+
         """
 
         # Calculate prior covariance matrix of the benchmarks

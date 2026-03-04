@@ -33,6 +33,7 @@ class Application:
     s : Sensitivity
         The energy-dependent sensitivity profiles.
     """
+
     title: str
     kind: str
     c: float
