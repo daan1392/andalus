@@ -178,7 +178,7 @@ class Application:
 @dataclass
 class ApplicationSuite:
     """A applicationsuite is a combined set of application objects.
-    
+
     Attributes
     ----------
     applications : dict[str, Application]

@@ -201,7 +201,7 @@ class Benchmark:
 @dataclass
 class BenchmarkSuite:
     """A benchmarksuite is a combined set of benchmark objects.
-    
+
     Attributes
     ----------
     benchmarks : dict[str, Benchmark]

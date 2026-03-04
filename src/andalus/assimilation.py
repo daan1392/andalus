@@ -206,6 +206,56 @@ class AssimilationSuite:
 
         return posteriorSuite
 
+    def individual_chi_squared(self, nuclear_data: bool = False) -> pd.Series:
+        r"""Calculate individual chi-squared for each benchmark in the suite.
+
+        .. math::
+        \chi^2 = \frac{(m - c)^2}{\sigma_m^2 + \sigma_c^2 + s^T C s}
+
+        Parameters
+        ----------
+        nuclear_data : bool, optional
+            Whether to include the contribution of the nuclear data
+            uncertainty in the chi² calculation, by default False.
+        """
+        cov = np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)
+
+        if nuclear_data:
+            cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
+
+        cov_inv = np.diag(cov) ** -1
+
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+
+        chi2 = b**2 * cov_inv
+
+        return pd.Series(chi2, index=self.benchmarks.titles).rename("chi_squared")
+
+    def chi_squared(self, nuclear_data: bool = False) -> float:
+        r"""Calculate the total chi-squared for the suite.
+
+        .. math::
+        \chi^2 = (m - c)^T C^{-1} (m - c)
+
+        Parameters
+        ----------
+        nuclear_data : bool, optional
+            Whether to include the contribution of the nuclear data
+            uncertainty in the chi² calculation, by default False.
+        """
+        cov = np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)
+
+        if nuclear_data:
+            cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
+
+        cov_inv = np.linalg.pinv(cov)
+
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+
+        chi2 = b.T @ cov_inv @ b
+
+        return chi2
+
 
 if __name__ == "__main__":
     assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
@@ -213,5 +263,9 @@ if __name__ == "__main__":
     print(assimilation_suite.ck_matrix())
 
     posterior_assimilation_suite = assimilation_suite.glls()
+    print(assimilation_suite.applications.c)
+    print(posterior_assimilation_suite.applications.c)
+    assert not np.allclose(assimilation_suite.applications.c, posterior_assimilation_suite.applications.c)
+    # print(posterior_assimilation_suite.ck_matrix())
 
-    print(posterior_assimilation_suite.ck_matrix())
+    print(assimilation_suite.chi_squared(nuclear_data=True))
