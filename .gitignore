@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Draft notebooks
+examples/drafts/
+
 # HDF5 extensions
 # *.h5
 
