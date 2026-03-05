@@ -3,8 +3,6 @@ which are used to represent and manage application data.
 """
 
 __all__ = ["Application", "ApplicationSuite"]
-__version__ = "0.1.1"
-__author__ = "Daan Houben"
 
 from dataclasses import dataclass, field, replace
 

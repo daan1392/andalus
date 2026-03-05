@@ -1,3 +1,22 @@
+"""Module containing the AssimilationSuite class, which is used to
+manage a collection of benchmark, application and covariance data
+for assimilation purposes. This class can be used to assemble a
+complete dataset for assimilation, and to perform operations on the
+entire suite. The AssimilationSuite class provides methods to
+access and manipulate the data, as well as to perform GLLS updates
+and calculate chi-squared values. This module also includes a
+factory method to create an AssimilationSuite instance from a
+YAML configuration file. The AssimilationSuite class relies on
+the BenchmarkSuite, ApplicationSuite, and CovarianceSuite classes,
+which are used to represent and manage benchmark, application, and
+covariance data respectively. These classes are defined in their
+respective modules within the andalus package. The AssimilationSuite
+class provides a convenient way to manage and analyze the data needed
+for assimilation studies in nuclear engineering applications.
+"""
+
+__all__ = ["AssimilationSuite"]
+
 from dataclasses import dataclass, replace
 
 import numpy as np

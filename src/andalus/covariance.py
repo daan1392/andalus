@@ -5,8 +5,6 @@ A covariance suite can be assembled from multiple Covariance objects, creating a
 """
 
 __all__ = ["Covariance", "CovarianceSuite"]
-__version__ = "0.1.1"
-__author__ = "Daan Houben"
 
 from dataclasses import dataclass
 

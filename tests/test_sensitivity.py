@@ -105,7 +105,7 @@ def test_plot_sensitivity_custom_ax(sample_sensitivity_data):
     """Test plot_sensitivity with custom axes."""
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     returned_ax = sample_sensitivity_data.plot_sensitivity(zais=[922350], perts=[18], ax=ax)
 
     assert returned_ax is ax

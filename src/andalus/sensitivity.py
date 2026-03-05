@@ -4,8 +4,6 @@ and have some additional methods for plotting and loading from Serpent output.
 """
 
 __all__ = ["Sensitivity"]
-__version__ = "0.1.1"
-__author__ = "Daan Houben"
 
 import matplotlib.pyplot as plt
 import numpy as np

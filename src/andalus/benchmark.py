@@ -3,8 +3,6 @@ which are used to represent and manage benchmark data.
 """
 
 __all__ = ["Benchmark", "BenchmarkSuite"]
-__version__ = "0.1.1"
-__author__ = "Daan Houben"
 
 from dataclasses import dataclass, field, replace
 
