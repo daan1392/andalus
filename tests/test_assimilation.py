@@ -124,8 +124,6 @@ def test_titles_property_with_empty_benchmarks():
     empty_benchmarks = BenchmarkSuite({})
     applications = ApplicationSuite.from_yaml("data/config.yaml")
 
-    # Get zais from applications
-    zais_list = sorted(list(set(applications.s.index.get_level_values("ZAI"))))
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
     suite = AssimilationSuite(benchmarks=empty_benchmarks, applications=applications, covariances=covariances)
@@ -143,7 +141,7 @@ def test_m_property_error_when_no_benchmarks():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No benchmarks in the assimilation suite"):
         _ = suite.m
@@ -156,7 +154,7 @@ def test_dm_property_error_when_no_benchmarks():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No benchmarks in the assimilation suite"):
         _ = suite.dm
@@ -169,7 +167,7 @@ def test_c_property_only_applications():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     c = suite.c
     assert isinstance(c, pd.Series)
@@ -183,7 +181,7 @@ def test_c_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
 
     c = suite.c
     assert isinstance(c, pd.Series)
@@ -193,7 +191,7 @@ def test_c_property_only_benchmarks():
 def test_c_property_error_when_both_none():
     """Test that c property raises ValueError when both benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
-    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite"):
         _ = suite.c
@@ -206,7 +204,7 @@ def test_dc_property_only_applications():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     dc = suite.dc
     assert isinstance(dc, pd.Series)
@@ -220,7 +218,7 @@ def test_dc_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
 
     dc = suite.dc
     assert isinstance(dc, pd.Series)
@@ -230,7 +228,7 @@ def test_dc_property_only_benchmarks():
 def test_dc_property_error_when_both_none():
     """Test that dc property raises ValueError when both benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
-    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite"):
         _ = suite.dc
@@ -243,7 +241,7 @@ def test_s_property_only_applications():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     s = suite.s
     assert isinstance(s, pd.DataFrame)
@@ -257,7 +255,7 @@ def test_s_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
 
     s = suite.s
     assert isinstance(s, pd.DataFrame)
@@ -267,7 +265,7 @@ def test_s_property_only_benchmarks():
 def test_s_property_error_when_both_none():
     """Test that s property raises ValueError when both benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
-    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite"):
         _ = suite.s
@@ -280,7 +278,7 @@ def test_ds_property_only_applications():
     applications = ApplicationSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
 
     ds = suite.ds
     assert isinstance(ds, pd.DataFrame)
@@ -294,7 +292,7 @@ def test_ds_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
 
     ds = suite.ds
     assert isinstance(ds, pd.DataFrame)
@@ -304,7 +302,7 @@ def test_ds_property_only_benchmarks():
 def test_ds_property_error_when_both_none():
     """Test that ds property raises ValueError when both benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
-    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
     with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite"):
         _ = suite.ds
