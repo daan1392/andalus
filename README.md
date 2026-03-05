@@ -16,10 +16,6 @@
 
 Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Source data assimilation tool for improving predictions of nuclear applications.
 
-* Created by **[Daan Houben](https://github.com/daan1392)**
-  * PyPI: https://pypi.org/user/daan1392/
-* PyPI package: https://pypi.org/project/andalus/
-
 ## Features
 
 * Perform sensitivity and uncertainty quantification suing first order approximation.
@@ -39,7 +35,7 @@ To set up for local development:
 
 ```bash
 # Clone your fork
-git clone git@github.com:daan1392/andalus.git
+git clone git@github.com:your_name_here/andalus.git
 cd andalus
 
 # Install in editable mode with live updates
@@ -63,5 +59,9 @@ just qa
 ## Author
 
 ANDALUS was created in 2026 by Daan Houben.
+
+* Created by **[Daan Houben](https://github.com/daan1392)**
+  * PyPI: https://pypi.org/user/daan1392/
+* PyPI package: https://pypi.org/project/andalus/
 
 Built with [Cookiecutter](https://github.com/cookiecutter/cookiecutter) and the [audreyfeldroy/cookiecutter-pypackage](https://github.com/audreyfeldroy/cookiecutter-pypackage) project template.
