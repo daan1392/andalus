@@ -112,13 +112,7 @@ uv run pytest tests/
 
 ## Deploying
 
-A reminder for the maintainers on how to deploy. Make sure all your changes are committed (including an entry in HISTORY.md). Then run:
-
-```sh
-uv version patch  # or: minor, major
-git commit -am "Release X.Y.Z"
-just tag
-```
+A reminder for the maintainers on how to deploy. Make sure all your changes are committed. On GitHub, draft a new release and automatically generate release notes. Copy these release notes into CHANGELOG.md, commit the changes. Publish the new version.
 
 GitHub Actions will automatically publish to PyPI when the tag is pushed. See `.github/workflows/publish.yml` for details.
 
