@@ -65,7 +65,7 @@ docs = [
 
 [project.urls]
 bugs = "https://github.com/daan1392/andalus/issues"
-changelog = "https://github.com/daan1392/andalus/blob/main/HISTORY.md"
+changelog = "https://github.com/daan1392/andalus/blob/main/CHANGELOG.md"
 documentation = "https://daan1392.github.io/andalus/"
 homepage = "https://github.com/daan1392/andalus"
 
