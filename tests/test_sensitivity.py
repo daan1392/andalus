@@ -77,3 +77,54 @@ def test_lethargy_calculation_logic(sample_sensitivity_data):
     normalized_val = val / lethargy_width
 
     assert normalized_val < val  # Lethargy normalization should reduce the value for wide bins
+
+
+def test_rename_sensitivity(sample_sensitivity_data):
+    """Test renaming a sensitivity object."""
+    renamed = sample_sensitivity_data.rename_sensitivity("NEW_CASE")
+
+    assert renamed.title == "NEW_CASE"
+    assert "NEW_CASE" in renamed.columns
+    assert "NEW_CASE_std" in renamed.columns
+    # Original should not be modified
+    assert sample_sensitivity_data.title == "HMF001"
+
+
+def test_plot_sensitivity_missing_zai(sample_sensitivity_data):
+    """Test plot_sensitivity with missing ZAI (should skip gracefully)."""
+    import matplotlib.pyplot as plt
+
+    # ZAI that doesn't exist in the data
+    ax = sample_sensitivity_data.plot_sensitivity(zais=[999999], perts=[18])
+
+    assert isinstance(ax, plt.Axes)
+    plt.close()
+
+
+def test_plot_sensitivity_custom_ax(sample_sensitivity_data):
+    """Test plot_sensitivity with custom axes."""
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots()
+    returned_ax = sample_sensitivity_data.plot_sensitivity(zais=[922350], perts=[18], ax=ax)
+
+    assert returned_ax is ax
+    plt.close()
+
+
+def test_sensitivity_constructor():
+    """Test creating a Sensitivity object with default values."""
+    sens = Sensitivity()
+
+    assert sens.title is None
+    assert sens.kind == "keff"
+
+
+def test_sensitivity_constructor_with_metadata():
+    """Test creating a Sensitivity object with metadata."""
+    data = {"col1": [1, 2], "col2": [3, 4]}
+    sens = Sensitivity(data, title="test_title", kind="void")
+
+    assert sens.title == "test_title"
+    assert sens.kind == "void"
+    assert len(sens) == 2
