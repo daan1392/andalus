@@ -88,3 +88,61 @@ def test_correlation_calculation(sample_cov):
     # Check that off-diagonal elements are between -1 and 1
     off_diag = corr.values[~np.eye(corr.shape[0], dtype=bool)]
     assert np.all((off_diag >= -1) & (off_diag <= 1))
+
+
+def test_covariance_nuclide_property(sample_cov):
+    """Test the nuclide property returns correct string."""
+    nuclide = sample_cov.nuclide
+    assert isinstance(nuclide, str)
+    assert "U" in nuclide  # U-235
+
+
+def test_covariance_empty():
+    """Test creating an empty Covariance object."""
+    empty_cov = Covariance()
+    assert len(empty_cov) == 0
+    assert empty_cov.empty
+
+
+def test_covariance_suite_from_df():
+    """Test creating CovarianceSuite from a DataFrame."""
+    idx = pd.MultiIndex.from_product([[922350], [18], [1.0, 10.0]], names=["ZAI", "MT", "E_min"])
+    data = np.eye(2)
+    df = pd.DataFrame(data, index=idx, columns=idx)
+
+    suite = CovarianceSuite.from_df(df)
+    assert isinstance(suite, CovarianceSuite)
+    assert suite.matrix.shape == (2, 2)
+
+
+def test_is_unrealistic_uncertainty(sample_cov):
+    """Test is_unrealistic_uncertainty method."""
+    # Normal covariance should not be unrealistic
+    assert not sample_cov.is_unrealistic_uncertainty(threshold=10)
+
+    # Create an unrealistic covariance
+    idx = pd.MultiIndex.from_product([[18], [1.0]], names=["MT", "E_min"])
+    data = np.array([[100.0]])  # Very large variance
+    unrealistic_cov = Covariance(data, index=idx, columns=idx)
+    unrealistic_cov.zai = 922350
+
+    # Should return True for unrealistic uncertainty
+    assert unrealistic_cov.is_unrealistic_uncertainty(threshold=10)
+
+
+def test_covariance_suite_from_dict():
+    """Test creating CovarianceSuite from a dictionary."""
+    # Create simple covariances with proper MultiIndex structure
+    idx1 = pd.MultiIndex.from_product([[18], [1.0], [10.0]], names=["MT", "E_min_eV", "E_max_eV"])
+    cov1 = Covariance(np.array([[1.0]]), index=idx1, columns=idx1)
+    cov1.zai = 922350
+
+    idx2 = pd.MultiIndex.from_product([[18], [1.0], [10.0]], names=["MT", "E_min_eV", "E_max_eV"])
+    cov2 = Covariance(np.array([[0.5]]), index=idx2, columns=idx2)
+    cov2.zai = 922380
+
+    suite = CovarianceSuite.from_dict({922350: cov1, 922380: cov2})
+
+    assert isinstance(suite, CovarianceSuite)
+    assert suite.matrix.shape[0] == 2
+    assert "ZAI" in suite.matrix.index.names
