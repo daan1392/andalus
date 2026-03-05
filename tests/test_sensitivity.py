@@ -123,8 +123,8 @@ def test_sensitivity_constructor():
 def test_sensitivity_constructor_with_metadata():
     """Test creating a Sensitivity object with metadata."""
     data = {"col1": [1, 2], "col2": [3, 4]}
-    sens = Sensitivity(data, title="test_title", kind="test_kind")
+    sens = Sensitivity(data, title="test_title", kind="void")
 
     assert sens.title == "test_title"
-    assert sens.kind == "test_kind"
+    assert sens.kind == "void"
     assert len(sens) == 2
