@@ -218,7 +218,11 @@ class AssimilationSuite:
         applications = ApplicationSuite.from_yaml(path)
 
         # Get the zais used in the benchmarks and applications to filter the covariance data
-        zais_set = set(benchmarks.s.index.get_level_values("ZAI")).union(applications.s.index.get_level_values("ZAI"))
+        zais_set = set()
+        if benchmarks:
+            zais_set.update(benchmarks.zais)
+        if applications:
+            zais_set.update(applications.zais)
         zais_list = sorted(list(zais_set))
         covariances = CovarianceSuite.from_yaml(path, zais=zais_list)
 
@@ -278,9 +282,7 @@ class AssimilationSuite:
 
         """
         if self.applications is None or self.benchmarks is None:
-            raise ValueError(
-                "glls() cannot be called: applications or benchmarks are not initialized."
-            )
+            raise ValueError("glls() cannot be called: applications or benchmarks are not initialized.")
 
         # Calculate prior covariance matrix of the benchmarks
         cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
