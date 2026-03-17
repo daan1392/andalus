@@ -254,7 +254,7 @@ class BenchmarkSuite:
             List of benchmark titles in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return list(self.benchmarks.keys())
 
     @property
@@ -267,7 +267,7 @@ class BenchmarkSuite:
             Series of benchmark types in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.kind for benchmark in self.benchmarks.values()], index=self.titles)
 
     @property
@@ -280,7 +280,7 @@ class BenchmarkSuite:
             List of unique ZAIs in the sensitivity data of the benchmarks in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         zais = set()
         for benchmark in self.benchmarks.values():
             zais.update(benchmark.s.index.get_level_values("ZAI").unique())
@@ -296,7 +296,7 @@ class BenchmarkSuite:
             Series of benchmark measurements in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.m for benchmark in self.benchmarks.values()], index=self.titles)
 
     @property
@@ -309,7 +309,7 @@ class BenchmarkSuite:
             Series of benchmark measurement uncertainties in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.dm for benchmark in self.benchmarks.values()], index=self.titles)
 
     @property
@@ -322,7 +322,7 @@ class BenchmarkSuite:
             DataFrame of benchmark measurement covariance in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.DataFrame(
             data=np.diag([benchmark.dm**2 for benchmark in self.benchmarks.values()]),
             index=self.titles,
@@ -339,7 +339,7 @@ class BenchmarkSuite:
             Series of benchmark calculated values in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.c for benchmark in self.benchmarks.values()], index=self.titles)
 
     @property
@@ -352,7 +352,7 @@ class BenchmarkSuite:
             Series of benchmark calculated uncertainties in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.Series([benchmark.dc for benchmark in self.benchmarks.values()], index=self.titles)
 
     @property
@@ -365,7 +365,7 @@ class BenchmarkSuite:
             DataFrame of sensitivity objects in the suite.
         """
         if not self.benchmarks:
-            AssertionError("No benchmarks in the suite.")
+            raise AssertionError("No benchmarks in the suite.")
         return pd.concat([benchmark.s.iloc[:, 0].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
             0
         )
@@ -379,6 +379,8 @@ class BenchmarkSuite:
         pd.DataFrame
             DataFrame of sensitivity uncertainties in the suite.
         """
+        if not self.benchmarks:
+            raise AssertionError("No benchmarks in the suite.")
         return pd.concat([benchmark.s.iloc[:, 1].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
             0
         )

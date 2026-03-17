@@ -15,9 +15,8 @@ def mock_sensitivity_df():
 
 
 @pytest.fixture
-def assimilation_setup(mock_sensitivity_df):
+def assimilation_setup():
     """Sets up a suite with mocked sub-suites."""
-    # Mock BenchmarkSuite
     suite = AssimilationSuite.from_yaml("data/config.yaml")
     return suite
 

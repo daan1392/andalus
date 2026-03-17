@@ -232,7 +232,7 @@ class ApplicationSuite:
             List of application titles in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         return list(self.applications.keys())
 
     @property
@@ -245,7 +245,7 @@ class ApplicationSuite:
             Series of application types in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         return pd.Series([application.kind for application in self.applications.values()], index=self.titles)
 
     @property
@@ -258,7 +258,7 @@ class ApplicationSuite:
             List of unique ZAIs in the sensitivity data of the applications in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         zais = set()
         for application in self.applications.values():
             zais.update(application.s.index.get_level_values("ZAI").unique())
@@ -274,7 +274,7 @@ class ApplicationSuite:
             Series of application calculated values in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         return pd.Series([application.c for application in self.applications.values()], index=self.titles)
 
     @property
@@ -287,7 +287,7 @@ class ApplicationSuite:
             Series of application calculated uncertainties in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         return pd.Series([application.dc for application in self.applications.values()], index=self.titles)
 
     @property
@@ -300,7 +300,7 @@ class ApplicationSuite:
             DataFrame of sensitivity objects in the suite.
         """
         if not self.applications:
-            AssertionError("No applications in the suite.")
+            raise AssertionError("No applications in the suite.")
         return pd.concat(
             [application.s.iloc[:, 0].to_frame() for application in self.applications.values()], axis=1
         ).fillna(0)
@@ -314,6 +314,8 @@ class ApplicationSuite:
         pd.DataFrame
             DataFrame of sensitivity uncertainties in the suite.
         """
+        if not self.applications:
+            raise AssertionError("No applications in the suite.")
         return pd.concat(
             [application.s.iloc[:, 1].to_frame() for application in self.applications.values()], axis=1
         ).fillna(0)
