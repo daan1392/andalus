@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import sandy
 import scipy.sparse
 from sandy.zam import zam2nuclide
 
@@ -40,6 +41,109 @@ class Covariance(pd.DataFrame):
         return zam2nuclide(self.zai)
 
     @classmethod
+    def from_errorr(
+        cls,
+        files: dict[str, str],
+        zai: int,
+        mts: list[int] | None = None,
+        temperature: float | None = None,
+        err: float | None = None,
+    ) -> "Covariance":
+        """
+        Construct a Covariance object from NJOY errorr output files.
+
+        Parameters
+        ----------
+        files : dict[str, str]
+            Dictionary mapping section names (e.g., 'errorr33') to file paths.
+        zai : int
+            Nuclide identifier (ZAI).
+        mts : list of int, optional
+            Filter for specific MT numbers.
+        temperature : float, optional
+            Temperature at which the covariance was generated.
+        err : float, optional
+            Associated error or tolerance.
+
+        Returns
+        -------
+        Covariance
+            Reconstructed covariance matrix from errorr data.
+        """
+        combined_errorr = [cls._errorr_to_df(key, sandy.Errorr.from_file(path)) for key, path in files.items()]
+
+        cov = pd.concat(combined_errorr).fillna(0)
+
+        # Filtering logic using level alignment
+        if mts:
+            mask_idx = cov.index.get_level_values("MT").isin(mts)
+            mask_col = cov.columns.get_level_values("MT").isin(mts)
+            cov = cov.loc[mask_idx, mask_col]
+
+        # Instantiate and assign metadata
+        obj = cls(cov)
+        obj.zai = zai
+        obj.temperature = temperature
+        obj.err = err
+
+        return obj
+
+    @staticmethod
+    def _errorr_to_df(key: str, errorr: sandy.Errorr) -> pd.DataFrame:
+        """
+        Convert a sandy.Errorr object to a pandas DataFrame with formatted indices.
+
+        Parameters
+        ----------
+        key : str
+            The section name (e.g., 'errorr33', 'errorr35').
+        errorr : sandy.Errorr
+            The Errorr object to convert.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame containing the covariance data with a
+            (MT, E_min_eV, E_max_eV) MultiIndex.
+        """
+        cov = errorr.get_cov().data
+
+        def transform_index(idx: pd.MultiIndex) -> pd.MultiIndex:
+            """Helper to transform the index levels and names."""
+            # Cast the "E" level to IntervalIndex to resolve .left/.right errors
+            e_intervals = pd.IntervalIndex(idx.get_level_values("E"))
+
+            mt_values = idx.get_level_values("MT")
+            if key == "errorr35":
+                mt_values = mt_values + 35000
+            elif key == "errorr34":
+                mt_values = mt_values + 34000
+
+            return pd.MultiIndex.from_arrays(
+                [
+                    mt_values,
+                    e_intervals.left,
+                    e_intervals.right,
+                ],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            )
+
+        # Apply transformation to both axes and drop "MAT" level
+        cov = cov.droplevel("MAT", axis=0).droplevel("MAT", axis=1)
+        cov.index = transform_index(cov.index)
+        cov.columns = transform_index(cov.columns)
+
+        if key == "errorr35":
+            # Enforce symmetry: (Lower Triangular + Upper Triangular - Diagonal)
+            vals = cov.values
+            tril_vals = np.tril(vals)
+            # Reconstruct into a symmetric matrix
+            symmetric_vals = tril_vals + tril_vals.T - np.diag(np.diag(vals))
+            cov = pd.DataFrame(symmetric_vals, index=cov.index, columns=cov.columns)
+
+        return cov
+
+    @classmethod
     def from_store(cls, store: pd.HDFStore, zai: int, mts: list[int] | None = None) -> "Covariance":
         """
         Extract and reconstruct a Covariance object from an open HDFStore.
@@ -63,17 +167,17 @@ class Covariance(pd.DataFrame):
         if key not in store:
             return cls()
 
-        # 1. Component Extraction
+        # Component Extraction
         sparse_data = store[key]
         attrs = store.get_storer(key).attrs
 
-        # 2. Index Reconstruction
+        # Index Reconstruction
         index = cls._reconstruct_index(store, zai_str, attrs)
 
-        # 3. Filtering and Matrix Assembly
+        # Filtering and Matrix Assembly
         matrix, final_index = cls._assemble_matrix(sparse_data, index, attrs.shape, mts)
 
-        # 4. Object Initialization
+        # Object Initialization
         obj = cls(
             matrix,
             index=final_index,
@@ -130,7 +234,7 @@ class Covariance(pd.DataFrame):
         # Build the index
         idx = pd.MultiIndex.from_arrays(index_levels)
 
-        # FIX: If the stored names are generic (level_0) or missing,
+        # If the stored names are generic (level_0) or missing,
         # force them to our standard to prevent 'MT not found' errors.
         standard_names = ["MT", "E_min", "E_max"]
         if len(index_levels) == 3:

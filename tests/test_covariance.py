@@ -29,6 +29,24 @@ def real_cov():
     return Covariance.from_hdf5(path, zai=922380, mts=[18])
 
 
+def test_covariance_from_errorr():
+    """Test constructing a Covariance from NJOY errorr files."""
+    files = {
+        "errorr31": os.path.join("data", "u235.errorr31"),
+        "errorr33": os.path.join("data", "u235.errorr33"),
+        "errorr34": os.path.join("data", "u235.errorr34"),
+        "errorr35": os.path.join("data", "u235.errorr35"),
+    }
+    cov = Covariance.from_errorr(files, zai=922350, mts=[2, 4, 18, 102, 35018, 456, 34251])
+
+    assert cov.zai == 922350
+    assert not cov.empty
+    assert all(mt in cov.index.get_level_values("MT") for mt in [2, 4, 18, 102, 35018, 456, 34251])
+    assert cov.shape[0] == cov.shape[1]
+    assert np.allclose(cov.values, cov.values.T)  # Check symmetry
+    assert cov.index.names == ["MT", "E_min_eV", "E_max_eV"]
+
+
 def test_metadata_persistence(sample_cov):
     """Ensure ZAI and MF stick during slicing."""
     sliced = sample_cov.iloc[:2, :2]
