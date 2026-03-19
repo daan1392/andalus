@@ -225,9 +225,6 @@ class Sensitivity(pd.DataFrame):
         if ax is None:
             _, ax = plt.subplots()
 
-        # Use the column name directly if title metadata isn't set
-        label_base = getattr(self, "title", self.columns[0])
-
         for zai, pert in [(z, p) for z in zais for p in perts]:
             try:
                 subset = self.loc[zai, pert]
@@ -245,7 +242,7 @@ class Sensitivity(pd.DataFrame):
                 e_min,
                 val,
                 where="post",
-                label=f"{label_base}: {zam2latex(zai)} {PERT_LABELS.get(pert, pert)}",
+                label = f"{zam2latex(zai)} {PERT_LABELS.get(pert, pert)}" if "label" not in kwargs else None,
                 **kwargs,
             )
 
@@ -253,7 +250,6 @@ class Sensitivity(pd.DataFrame):
 
         ax.set(xscale="log", xlabel="Energy (eV)", ylabel="Sensitivity / unit lethargy")
         ax.grid(True, which="both", alpha=0.3)
-        ax.legend()
         return ax
 
 
