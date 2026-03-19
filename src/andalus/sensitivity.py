@@ -5,6 +5,8 @@ and have some additional methods for plotting and loading from Serpent output.
 
 __all__ = ["Sensitivity"]
 
+from itertools import product
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -222,14 +224,26 @@ class Sensitivity(pd.DataFrame):
         **kwargs
             Additional keyword arguments to be passed to the plotting function.
         """
+        required_levels = {"ZAI", "MT"}
+        if not required_levels.issubset(self.index.names):
+            raise ValueError(f"Index must contain {required_levels} levels. Found: {self.index.names}")
+
+        available_indices = self.index.droplevel(["E_min_eV", "E_max_eV"]).unique()
+        valid_combinations = [(z, p) for z, p in product(zais, perts) if (z, p) in available_indices]
+
+        if not valid_combinations:
+            raise ValueError(
+                f"No valid ZAI/MT combinations found in the data for the provided zais and perts.\n"
+                f"Available combinations: {available_indices.tolist()}\n"
+                f"Requested zais: {zais}\n"
+                f"Requested perts: {perts}"
+            )
+
         if ax is None:
-            _, ax = plt.subplots()
+            _, ax = plt.subplots(figsize=(5, 4), layout="constrained")
 
         for zai, pert in [(z, p) for z in zais for p in perts]:
-            try:
-                subset = self.loc[zai, pert]
-            except KeyError:
-                continue
+            subset = self.loc[zai, pert]
 
             e_min = subset.index.get_level_values("E_min_eV")
             e_max = subset.index.get_level_values("E_max_eV")
@@ -250,8 +264,10 @@ class Sensitivity(pd.DataFrame):
 
         ax.set(xscale="log", xlabel="Energy (eV)", ylabel="Sensitivity / unit lethargy")
         ax.grid(True, which="both", alpha=0.3)
+
         if ax.get_legend() is not None:
             ax.legend()
+
         return ax
 
 

@@ -92,17 +92,15 @@ def test_rename_sensitivity(sample_sensitivity_data):
 
 def test_plot_sensitivity_missing_zai(sample_sensitivity_data):
     """Test plot_sensitivity with missing ZAI (should skip gracefully)."""
-    import matplotlib.pyplot as plt
-
-    # ZAI that doesn't exist in the data
-    ax = sample_sensitivity_data.plot_sensitivity(zais=[999999], perts=[18])
-
-    assert isinstance(ax, plt.Axes)
-    plt.close()
+    with pytest.raises(ValueError, match="No valid ZAI/MT combinations found"):
+        sample_sensitivity_data.plot_sensitivity(zais=[999999], perts=[18])
 
 
 def test_plot_sensitivity_custom_ax(sample_sensitivity_data):
     """Test plot_sensitivity with custom axes."""
+    import matplotlib
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     _, ax = plt.subplots()
