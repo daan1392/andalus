@@ -288,11 +288,15 @@ class AssimilationSuite:
         cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
         # Propagate the uncertainty on the sensitivity profiles
-        cov_ds = pd.DataFrame(
-            np.diag(((self.benchmarks.s * self.benchmarks.ds.values)**2).sum(axis=0)),
-            self.benchmarks.s.columns,
-            self.benchmarks.s.columns
-        ) if include_sensitivity_uncertainty else None
+        cov_ds = (
+            pd.DataFrame(
+                np.diag(((self.benchmarks.s * self.benchmarks.ds.values) ** 2).sum(axis=0)),
+                self.benchmarks.s.columns,
+                self.benchmarks.s.columns,
+            )
+            if include_sensitivity_uncertainty
+            else None
+        )
 
         # Build total benchmark covariance before inversion
         cov_exp_calc = pd.DataFrame(
