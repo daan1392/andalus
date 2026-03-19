@@ -263,7 +263,7 @@ class AssimilationSuite:
 
         return ck_matrix[target].drop(labels=target)
 
-    def glls(self):
+    def glls(self, include_sensitivity_uncertainty: bool = False) -> "AssimilationSuite":
         """Perform a GLLS update [1] on the assimilation suite using the sensitivity
         profiles and covariance data loaded in the AssimilationSuite. This method updates
         the calculated response and the covariance matrices.
@@ -288,13 +288,28 @@ class AssimilationSuite:
         cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
         # Propagate the uncertainty on the sensitivity profiles
-        # cov_ds = sandwich(self.benchmarks.ds, self.covariances.matrix, self.benchmarks.ds)
+        cov_ds = pd.DataFrame(
+            np.diag(((self.benchmarks.s * self.benchmarks.ds.values)**2).sum(axis=0)),
+            self.benchmarks.s.columns,
+            self.benchmarks.s.columns
+        ) if include_sensitivity_uncertainty else None
 
-        # Calculate inverse of the precision matrix
+        # Build total benchmark covariance before inversion
+        cov_exp_calc = pd.DataFrame(
+            np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2),
+            index=cov_prior.index,
+            columns=cov_prior.columns,
+        )
+
+        cov_total = cov_prior + cov_exp_calc
+        if include_sensitivity_uncertainty and cov_ds is not None:
+            cov_total = cov_total + cov_ds
+
+        # Inverse (pseudo-inverse) of total covariance
         C_inv = pd.DataFrame(
-            np.linalg.pinv(cov_prior + np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)),
-            cov_prior.columns,
-            cov_prior.index,
+            np.linalg.pinv(cov_total.values),
+            index=cov_total.index,
+            columns=cov_total.columns,
         )
 
         # Calculate difference between experimental and calculated values
@@ -307,7 +322,9 @@ class AssimilationSuite:
         Vx_post = self.covariances.matrix.loc[idx, idx] - A @ C_inv @ A.T
 
         c_ = self.benchmarks.c + self.benchmarks.s.loc[idx].T @ dx.loc[idx] * self.benchmarks.c
-        c_a = self.applications.c + self.applications.s.loc[idx].T @ dx.loc[idx] * self.applications.c
+
+        idx_a = self.applications.s.index.intersection(idx)
+        c_a = self.applications.c + self.applications.s.loc[idx_a].T @ dx.loc[idx_a] * self.applications.c
         # Vc_post = self.benchmarks.s.loc[idx].T @ Vx_post.loc[idx, idx] @ self.benchmarks.s.loc[idx]
 
         # Initialize new benchmarkSuite with updated calculation values
