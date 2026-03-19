@@ -242,7 +242,7 @@ class Sensitivity(pd.DataFrame):
                 e_min,
                 val,
                 where="post",
-                label = f"{zam2latex(zai)} {PERT_LABELS.get(pert, pert)}" if "label" not in kwargs else None,
+                label=f"{zam2latex(zai)} {PERT_LABELS.get(pert, pert)}" if "label" not in kwargs else None,
                 **kwargs,
             )
 
@@ -250,20 +250,21 @@ class Sensitivity(pd.DataFrame):
 
         ax.set(xscale="log", xlabel="Energy (eV)", ylabel="Sensitivity / unit lethargy")
         ax.grid(True, which="both", alpha=0.3)
+        ax.legend()
         return ax
 
 
 if __name__ == "__main__":
     # Example usage
     sens = Sensitivity.from_serpent(
-        sens0_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_sens0.m",
+        sens0_path=r"C:\Users\dhouben\Documents\andalus\data\hmf001.ser_sens0.m",
         title="ExampleSensitivity",
         kind="keff",
         materiallist=["total"],
         pertlist=["mt 18 xs", "mt 102 xs"],
     )
-    # sens.plot_sensitivity(zais=[922380], perts=[18, 102])
-    # plt.show()
+    sens.plot_sensitivity(zais=[922380], perts=[18, 102])
+    plt.show()
     print(sens.index)
     print(sens.isotopes)
-    sens.to_hdf5(r"C:\Users\dhouben\Documents\andalus\tests\example_sensitivity.h5")
+    # sens.to_hdf5(r"C:\Users\dhouben\Documents\andalus\data\example_sensitivity.h5")
