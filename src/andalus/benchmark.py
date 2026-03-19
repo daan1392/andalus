@@ -9,9 +9,9 @@ from dataclasses import dataclass, field, replace
 import h5py
 import numpy as np
 import pandas as pd
-import serpentTools
 
 from andalus.sensitivity import Sensitivity
+from andalus.utils import read_serpent
 
 
 @dataclass(frozen=True)
@@ -108,7 +108,7 @@ class Benchmark:
         if pertlist is None:
             pertlist = ["mt 2 xs", "mt 4 xs", "mt 18 xs", "mt 102 xs", "nubar prompt", "chi prompt"]
 
-        results = serpentTools.read(results_path)
+        results = read_serpent(results_path)
         c = results.resdata["absKeff"][0]
         dc = results.resdata["absKeff"][1]
 

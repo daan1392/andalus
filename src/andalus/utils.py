@@ -1,4 +1,19 @@
+import warnings
+
 import pandas as pd
+import serpentTools
+
+
+def read_serpent(path):
+    """Read a Serpent file while suppressing a known upstream NumPy deprecation warning."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            category=DeprecationWarning,
+            message=r"Conversion of an array with ndim > 0 to a scalar is deprecated.*",
+            module=r"serpentTools\.parsers\.results",
+        )
+        return serpentTools.read(path)
 
 
 def sandwich(s1, cov, s2):

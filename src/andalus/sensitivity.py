@@ -8,10 +8,10 @@ __all__ = ["Sensitivity"]
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import serpentTools
 from sandy import zam2latex
 
 from andalus.constants import MT_TRANSLATION, PERT_LABELS
+from andalus.utils import read_serpent
 
 
 class Sensitivity(pd.DataFrame):
@@ -99,7 +99,7 @@ class Sensitivity(pd.DataFrame):
         SensitivityError
             If there is an error reading the sensitivity file.
         """
-        sens = serpentTools.read(sens0_path)
+        sens = read_serpent(sens0_path)
 
         materiallist = materiallist or sens.materials
         zailist = zailist or sens.zais
@@ -250,7 +250,8 @@ class Sensitivity(pd.DataFrame):
 
         ax.set(xscale="log", xlabel="Energy (eV)", ylabel="Sensitivity / unit lethargy")
         ax.grid(True, which="both", alpha=0.3)
-        ax.legend()
+        if ax.get_legend() is not None:
+            ax.legend()
         return ax
 
 
