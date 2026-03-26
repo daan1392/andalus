@@ -29,6 +29,11 @@ source_suffix = {
     ".md": "markdown",
 }
 
+myst_enable_extensions = [
+    "dollarmath",
+    "amsmath",
+]
+
 collections = {
     "examples_gallery": {
         "driver": "copy_folder",

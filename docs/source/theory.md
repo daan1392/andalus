@@ -16,7 +16,7 @@ Mathematically, these uncertainties and their correlations are described by nucl
 
 ## Sensitivity Analysis
 
-To utilize the integral benchmark data for adjusting the fundamental nuclear data $\boldsymbol{\alpha}$, we must understand exactly how a variation in a specific nuclear data parameter impacts the calculated integral response. Let $R(\boldsymbol{\alpha})$ be a calculated integral response (e.g., $k_{\texttext{eff}}$) which depends on the nuclear data vector $\boldsymbol{\alpha}$.
+To utilize the integral benchmark data for adjusting the fundamental nuclear data $\boldsymbol{\alpha}$, we must understand exactly how a variation in a specific nuclear data parameter impacts the calculated integral response. Let $R(\boldsymbol{\alpha})$ be a calculated integral response (e.g., $k_{\text{eff}}$) which depends on the nuclear data vector $\boldsymbol{\alpha}$.
 
 Because the nuclear data variations within their physical uncertainty bounds are typically small relative to the absolute magnitude of the cross-sections, we can approximate the change in the integral response using a first-order Taylor series expansion. This is valid as long as the uncertainties remain small, ensuring that the system's response to perturbations is predominantly linear.
 
