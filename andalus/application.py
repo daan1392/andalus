@@ -442,8 +442,8 @@ if __name__ == "__main__":
     # Example usage
     app = Application.from_serpent(
         title="HMF001",
-        results_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_res.m",
-        sens0_path=r"C:\Users\dhouben\Documents\andalus\tests\hmf001.ser_sens0.m",
+        results_path="data/hmf001.ser_res.m",
+        sens0_path="data/hmf001.ser_sens0.m",
     )
     app.print_summary()
     import matplotlib.pyplot as plt
