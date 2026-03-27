@@ -60,5 +60,6 @@ html_static_path = ["_static"]
 html_logo = "_static/data-assimilation.png"
 html_favicon = "_static/data-assimilation.png"
 
+
 def setup(app):
-    app.add_css_file('custom.css')
+    app.add_css_file("custom.css")
