@@ -5,13 +5,13 @@
 To install ANDALUS, run this command in your terminal:
 
 ```sh
-uv add andalus
+pip install andalus
 ```
 
-Or if you prefer to use `pip`:
+Or if you prefer to use `uv`:
 
 ```sh
-pip install andalus
+uv add andalus
 ```
 
 ## From source
@@ -25,6 +25,13 @@ git clone https://github.com/daan1392/andalus
 ```
 
 Once you have a copy of the source, you can install it with:
+
+```sh
+cd andalus
+pip install .
+```
+
+or
 
 ```sh
 cd andalus
