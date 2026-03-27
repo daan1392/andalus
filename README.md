@@ -18,7 +18,7 @@ Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Sourc
 
 ## Features
 
-* Perform sensitivity and uncertainty quantification suing first order approximation.
+* Perform sensitivity and uncertainty quantification using first order approximation.
 * Use the Generalized Linear Least Squares equation to infer multi-group nuclear data.
 
 ## Documentation
