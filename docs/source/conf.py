@@ -9,7 +9,7 @@
 project = "ANDALUS"
 copyright = "2026, Daan Houben"
 author = "Daan Houben"
-release = "0.1.1"
+release = "0.1.2"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -60,5 +60,5 @@ html_static_path = ["_static"]
 html_logo = "_static/data-assimilation.png"
 html_favicon = "_static/data-assimilation.png"
 
-# def setup(app):
-#     app.add_css_file('custom.css')
+def setup(app):
+    app.add_css_file('custom.css')
