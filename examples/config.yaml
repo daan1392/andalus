@@ -26,3 +26,5 @@ applications:
     description: "Topsy 8-inch tuballoy reflected oralloy assemblies (cylinder)."
     sens0_path: "../data/hmf002-002.ser_sens0.m"
     results_path: "../data/hmf002-002.ser_res.m"
+    m: 1.00000
+    dm: 0.00300
