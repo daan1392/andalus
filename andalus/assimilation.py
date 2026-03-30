@@ -26,6 +26,13 @@ class AssimilationSuite:
     benchmarks: BenchmarkSuite
     applications: ApplicationSuite
     covariances: CovarianceSuite
+    xs_adjustment: pd.Series | None = None
+    prior_c: pd.Series | None = None
+
+    def __post_init__(self):
+        if self.benchmarks is not None or self.applications is not None:
+            if self.prior_c is None:
+                self.prior_c = self.c
 
     @property
     def titles(self):
@@ -87,14 +94,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.c
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.c
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.c, self.applications.c], axis=0).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.c)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.c)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=0).fillna(0.0)
 
     @property
     def dc(self):
@@ -114,14 +125,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.dc
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.dc
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.dc, self.applications.dc], axis=0).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.dc)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.dc)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=0).fillna(0.0)
 
     @property
     def s(self):
@@ -181,6 +196,31 @@ class AssimilationSuite:
             return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
         else:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    @property
+    def is_posterior(self) -> bool:
+        """Check if the assimilation suite contains posterior data by checking if nd_adjustments is not None.
+
+        Returns
+        -------
+        bool
+            True if the suite contains posterior data, False otherwise.
+        """
+        return self.xs_adjustment is not None and not self.xs_adjustment.empty
+
+    @property
+    def prior_discrepancy(self) -> pd.Series:
+        """Return the prior discrepancy between calculated and measured responses for the benchmarks.
+
+        Returns
+        -------
+        pd.Series
+            A Series containing the prior discrepancy for each benchmark in the suite.
+        """
+        if self.benchmarks is not None:
+            return (self.prior_c - self.m) / self.m
+        else:
+            raise ValueError("No benchmarks in the assimilation suite.")
 
     def propagate_nuclear_data_uncertainty(self):
         """Propagate the nuclear data uncertainty through the sensitivity profiles
@@ -406,12 +446,14 @@ class AssimilationSuite:
 if __name__ == "__main__":
     assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
 
-    print(assimilation_suite.ck_matrix())
+    # print(assimilation_suite.ck_matrix())
 
     posterior_assimilation_suite = assimilation_suite.glls()
-    print(assimilation_suite.applications.c)
-    print(posterior_assimilation_suite.applications.c)
-    assert not np.allclose(assimilation_suite.applications.c, posterior_assimilation_suite.applications.c)
-    # print(posterior_assimilation_suite.ck_matrix())
+    # print(assimilation_suite.applications.c)
+    # print(posterior_assimilation_suite.applications.c)
+    # assert not np.allclose(assimilation_suite.applications.c, posterior_assimilation_suite.applications.c)
+    # # print(posterior_assimilation_suite.ck_matrix())
 
     print(assimilation_suite.chi_squared(nuclear_data=True))
+    print(assimilation_suite.prior_discrepancy)
+    print(posterior_assimilation_suite.prior_discrepancy)
