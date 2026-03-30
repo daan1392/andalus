@@ -133,29 +133,23 @@ def test_titles_property_with_empty_benchmarks():
     assert "HMF002-002" in titles
 
 
-def test_m_property_error_when_no_benchmarks():
-    """Test that m property raises ValueError when benchmarks is None."""
-    from andalus.application import ApplicationSuite
-
-    applications = ApplicationSuite.from_yaml("data/config.yaml")
+def test_m_property_error_when_no_benchmarks_or_applications():
+    """Test that m property raises ValueError when benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
-    with pytest.raises(ValueError, match="No benchmarks in the assimilation suite"):
+    with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite."):
         _ = suite.m
 
 
-def test_dm_property_error_when_no_benchmarks():
-    """Test that dm property raises ValueError when benchmarks is None."""
-    from andalus.application import ApplicationSuite
-
-    applications = ApplicationSuite.from_yaml("data/config.yaml")
+def test_dm_property_error_when_no_benchmarks_or_applications():
+    """Test that dm property raises ValueError when benchmarks and applications are None."""
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=None, applications=applications, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=None, applications=None, covariances=covariances)  # type: ignore
 
-    with pytest.raises(ValueError, match="No benchmarks in the assimilation suite"):
+    with pytest.raises(ValueError, match="No applications or benchmarks in the assimilation suite."):
         _ = suite.dm
 
 

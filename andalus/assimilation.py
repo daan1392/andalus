@@ -50,31 +50,47 @@ class AssimilationSuite:
 
     @property
     def m(self):
-        """Return experimental values from the benchmark suite.
+        """Return experimental values from the benchmark and application suites.
 
         Returns
         -------
         pd.Series
-            A Series containing the experimental values from the benchmark suite.
+            A Series containing the experimental values from the benchmark and application suites.
         """
-        if self.benchmarks is not None:
-            return self.benchmarks.m
-        else:
-            raise ValueError("No benchmarks in the assimilation suite.")
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.m)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.m)
+
+        if not parts:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=0).fillna(0.0)
 
     @property
     def dm(self):
-        """Return experimental uncertainty values from the benchmark suite.
+        """Return experimental uncertainty values from the benchmark and application suites.
 
         Returns
         -------
         pd.Series
-            A Series containing the experimental uncertainty values from the benchmark suite.
+            A Series containing the experimental uncertainty values from the benchmark and application suites.
         """
-        if self.benchmarks is not None:
-            return self.benchmarks.dm
-        else:
-            raise ValueError("No benchmarks in the assimilation suite.")
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.dm)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.dm)
+
+        if not parts:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=0).fillna(0.0)
 
     @property
     def c(self):
