@@ -37,6 +37,8 @@ class Application:
     c: float
     dc: float
     s: Sensitivity
+    m: float | None = None
+    dm: float | None = None
 
     def __post_init__(self):
         if not isinstance(self.title, str):
@@ -49,6 +51,10 @@ class Application:
             raise TypeError(f"Calculated uncertainty {self.dc} must be a number")
         if not isinstance(self.s, Sensitivity):
             raise TypeError(f"Sensitivity {self.s} must be a Sensitivity object")
+        if not isinstance(self.m, (int, float, type(None))):
+            raise TypeError(f"Measured value {self.m} must be a number or None")
+        if not isinstance(self.dm, (int, float, type(None))):
+            raise TypeError(f"Measured uncertainty {self.dm} must be a number or None")
 
     @classmethod
     def from_serpent(
@@ -60,6 +66,8 @@ class Application:
         materials=None,
         zailist=None,
         pertlist=None,
+        m: float | None = None,
+        dm: float | None = None,
     ):
         """Method to create an Application object from a serpent output.
 
@@ -79,6 +87,10 @@ class Application:
             The ZAIs which have to be extracted from the sensitivity file, by default None.
         pertlist : _type_, optional
             The perturbations which have to be extracted from the sensitivity file, by default None.
+        m : float, optional
+            Measured value for the application, by default None.
+        dm : float, optional
+            Uncertainty of the measured value, by default None.
 
         Returns
         -------
@@ -104,7 +116,7 @@ class Application:
             pertlist=pertlist,
         )
 
-        return cls(title=title, kind=kind, c=c, dc=dc, s=sensitivity)
+        return cls(title=title, kind=kind, c=c, dc=dc, s=sensitivity, m=m, dm=dm)
 
     @classmethod
     def from_hdf5(cls, file_path, title: str, kind: str = "keff"):
@@ -134,6 +146,8 @@ class Application:
             grp = f[kind][title]
             c = grp.attrs["c"]
             dc = grp.attrs["dc"]
+            m = grp.attrs["m"] if "m" in grp.attrs else None
+            dm = grp.attrs["dm"] if "dm" in grp.attrs else None
 
         return cls(
             title=title,
@@ -141,6 +155,8 @@ class Application:
             c=c,
             dc=dc,
             s=Sensitivity.from_hdf5(file_path, title=title, kind=kind),
+            m=m,
+            dm=dm,
         )
 
     def to_hdf5(self, file_path="benchmarks.h5"):
@@ -162,6 +178,10 @@ class Application:
             grp = f.create_group(f"{self.kind}/{self.title}")
             grp.attrs["c"] = self.c
             grp.attrs["dc"] = self.dc
+            if self.m is not None:
+                grp.attrs["m"] = self.m
+            if self.dm is not None:
+                grp.attrs["dm"] = self.dm
 
         # Save sensitivity DataFrame using pandas to_hdf
         self.s.to_hdf(file_path, key=f"{self.kind}/{self.title}/sensitivity", mode="a", format="table")
@@ -171,6 +191,7 @@ class Application:
         print(f"Application: {self.title}")
         print(f"Type: {self.kind}")
         print(f"Calculated: {self.c} ± {self.dc}")
+        print(f"Measured: {self.m} ± {self.dm}")
 
     def plot_sensitivity(self, zais, perts, ax=None, **kwargs):
         """Plot the sensitivity profiles for the application.
@@ -341,6 +362,32 @@ class ApplicationSuite:
             [application.s.iloc[:, 1].to_frame() for application in self.applications.values()], axis=1
         ).fillna(0)
 
+    @property
+    def m(self) -> pd.Series:
+        """Returns a pd.Series of application measured values in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of application measured values in the suite.
+        """
+        if not self.applications:
+            raise AssertionError("No applications in the suite.")
+        return pd.Series([application.m for application in self.applications.values()], index=self.titles)
+
+    @property
+    def dm(self) -> pd.Series:
+        """Returns a pd.Series of application measured uncertainties in the suite.
+
+        Returns
+        -------
+        pd.Series of float
+            Series of application measured uncertainties in the suite.
+        """
+        if not self.applications:
+            raise AssertionError("No applications in the suite.")
+        return pd.Series([application.dm for application in self.applications.values()], index=self.titles)
+
     @classmethod
     def from_list(cls, applications: list[Application]):
         """Method to create an ApplicationSuite instance from a list of Application objects.
@@ -410,6 +457,8 @@ class ApplicationSuite:
                     materials=application_config.get("materials"),
                     zailist=application_config.get("zailist"),
                     pertlist=application_config.get("pertlist"),
+                    m=application_config.get("m") if "m" in application_config else None,
+                    dm=application_config.get("dm") if "dm" in application_config else None,
                 )
                 applications[application.title] = application
             elif "hdf5_path" in application_config:
@@ -481,9 +530,25 @@ if __name__ == "__main__":
         title="HMF001",
         results_path="data/hmf001.ser_res.m",
         sens0_path="data/hmf001.ser_sens0.m",
+        m=1.0000,
+        dm=0.00100,
+    )
+    app2 = Application.from_serpent(
+        title="HMF002-001",
+        results_path="data/hmf002-001.ser_res.m",
+        sens0_path="data/hmf002-001.ser_sens0.m",
+        m=1.0000,
+        dm=0.00300,
     )
     app.print_summary()
-    import matplotlib.pyplot as plt
 
-    app.s.plot_sensitivity(zais=[922380], perts=[2, 4])
-    plt.show()
+    app_suite = ApplicationSuite.from_list([app, app2])
+
+    print(app.m, app.dm)
+    print(app2.m, app2.dm)
+
+    print(app_suite.m)
+    # import matplotlib.pyplot as plt
+
+    # app.s.plot_sensitivity(zais=[922380], perts=[2, 4])
+    # plt.show()
