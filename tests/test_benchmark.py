@@ -359,6 +359,23 @@ class TestBenchmarkSuiteInitialization:
         suite.remove("NonExistent")  # Should not raise
         assert len(suite.benchmarks) == 1
 
+    def test_suite_from_list(self, test_benchmark):
+        """Test creating a BenchmarkSuite from a list of benchmarks."""
+        b2 = Benchmark(
+            title="HMF002",
+            kind="keff",
+            m=2.0,
+            dm=0.003,
+            c=1.001,
+            dc=0.0002,
+            s=test_benchmark.s.rename_sensitivity("HMF002"),
+        )
+        suite = BenchmarkSuite.from_list([test_benchmark, b2])
+
+        assert len(suite.benchmarks) == 2
+        assert "HMF001" in suite.benchmarks
+        assert "HMF002" in suite.benchmarks
+
     def test_suite_properties(self, test_benchmark):
         """Test BenchmarkSuite properties (titles, kinds, m/dm/c/dc, cov, s/ds)."""
         b2 = Benchmark(

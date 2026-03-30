@@ -417,6 +417,10 @@ class BenchmarkSuite:
         -------
         BenchmarkSuite
             Returns a BenchmarkSuite object containing the imported Benchmark objects.
+
+        Notes
+        -----
+        If `titles` is None, the method will attempt to load all benchmarks of the specified `kind` from the HDF5 file.
         """
         if not titles:
             with h5py.File(file_path, "r") as f:

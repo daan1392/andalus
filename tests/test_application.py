@@ -270,6 +270,20 @@ class TestApplicationSuiteInitialization:
         suite.remove("NonExistent")  # Should not raise
         assert len(suite.applications) == 1
 
+    def test_suite_from_list(self, test_application):
+        """Test creating an ApplicationSuite from a list of applications."""
+        a2 = Application(
+            title="HMF002",
+            kind="keff",
+            c=1.001,
+            dc=0.0002,
+            s=test_application.s.rename_sensitivity("HMF002"),
+        )
+        suite = ApplicationSuite.from_list([test_application, a2])
+        assert len(suite.applications) == 2
+        assert "HMF001" in suite.applications
+        assert "HMF002" in suite.applications
+
     def test_suite_properties(self, test_application):
         """Test ApplicationSuite properties (titles, kinds, c/dc, s/ds)."""
         a2 = Application(
