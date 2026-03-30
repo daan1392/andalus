@@ -227,7 +227,7 @@ class Chi2NuclearDataFilter(Filter):
         m = benchmark.m
         dm = benchmark.dm
 
-        v_nd = sandwich(benchmark.s.iloc[:,0], self.covariance_matrix)
+        v_nd = sandwich(benchmark.s.iloc[:, 0], self.covariance_matrix)
 
         var_total = dm**2 + benchmark.dc**2 + v_nd
 
