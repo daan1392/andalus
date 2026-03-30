@@ -13,6 +13,7 @@ import pandas as pd
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
+from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
 from andalus.utils import sandwich
 
 
@@ -319,6 +320,29 @@ class AssimilationSuite:
 
         return ck_matrix[target].drop(labels=target)
 
+    def filter(self, filter_fn) -> "AssimilationSuite":
+        """Filter the benchmarks available in the assimilation suite based on a provided
+        filter function.
+
+        Parameters
+        ----------
+        filter_fn : function or Filter
+            A function that takes a Benchmark object and returns True
+            if it should be included in the filtered suite.
+        """
+        filtered_benchmarks = self.benchmarks.filter(filter_fn) if self.benchmarks else None
+
+        if filtered_benchmarks is None or len(filtered_benchmarks) == 0:
+            raise ValueError("Filtering resulted in an empty benchmark suite. Please adjust the filter criteria.")
+
+        return type(self)(
+            benchmarks=filtered_benchmarks,
+            applications=self.applications,  # We typically do not filter applications.
+            covariances=self.covariances,
+            xs_adjustment=self.xs_adjustment,
+            prior_c=self.prior_c,
+        )
+
     def glls(self, include_sensitivity_uncertainty: bool = False) -> "AssimilationSuite":
         """Perform a GLLS update [1] on the assimilation suite using the sensitivity
         profiles and covariance data loaded in the AssimilationSuite. This method updates
@@ -337,6 +361,11 @@ class AssimilationSuite:
          doi: 10.13182/NSE03-2.
 
         """
+        print("Performing GLLS update on the assimilation suite...")
+        print(f"    Number of benchmarks included in GLLS: {len(self.benchmarks) if self.benchmarks else 0}")
+        print(f"    Prior chi-squared with nuclear data: {self.chi_squared(nuclear_data=True):.4f}")
+        print(f"    Prior chi-squared without nuclear data: {self.chi_squared(nuclear_data=False):.4f}")
+
         if self.applications is None or self.benchmarks is None:
             raise ValueError("glls() cannot be called: applications or benchmarks are not initialized.")
 
@@ -404,8 +433,13 @@ class AssimilationSuite:
             benchmarks=BenchmarkSuite(post_bench),
             applications=ApplicationSuite(post_app),
             covariances=CovarianceSuite.from_df(Vx_post),
+            xs_adjustment=dx,
+            prior_c=self.prior_c,
         )
 
+        print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")
+        print(f"    Posterior chi-squared without nuclear data: {posteriorSuite.chi_squared(nuclear_data=False):.4f}")
+        print("")
         return posteriorSuite
 
     def individual_chi_squared(self, nuclear_data: bool = False) -> pd.Series:
@@ -458,18 +492,35 @@ class AssimilationSuite:
 
         return chi2
 
+    def summarize(self):
+        """Print a summary of the assimilation suite, including the number of benchmarks and applications,
+        the titles of the cases included, and the chi-squared values with and without nuclear data.
+        """
+        print("Assimilation Suite Summary:")
+        print(f"  Number of benchmarks: {len(self.benchmarks) if self.benchmarks else 0}")
+        print(f"  Number of applications: {len(self.applications) if self.applications else 0}")
+        print(f"  Titles: {', '.join(self.titles)}")
+        print(f"  Chi-squared with nuclear data: {self.chi_squared(nuclear_data=True):.4f}")
+        print(f"  Chi-squared without nuclear data: {self.chi_squared(nuclear_data=False):.4f}")
+        print(f"  Calculated bias: {self.c - self.prior_c}")
+        print("")
+
 
 if __name__ == "__main__":
     assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
+    from andalus.filters import Chi2Filter
 
-    # print(assimilation_suite.ck_matrix())
-
-    posterior_assimilation_suite = assimilation_suite.glls()
+    post_suite = (
+        assimilation_suite.filter(Chi2Filter(threshold=5))
+        .filter(Chi2NuclearDataFilter(threshold=1, covariance_matrix=assimilation_suite.covariances.matrix))
+        .glls()
+        .summarize()
+    )
     # print(assimilation_suite.applications.c)
     # print(posterior_assimilation_suite.applications.c)
     # assert not np.allclose(assimilation_suite.applications.c, posterior_assimilation_suite.applications.c)
     # # print(posterior_assimilation_suite.ck_matrix())
 
-    print(assimilation_suite.chi_squared(nuclear_data=True))
-    print(assimilation_suite.prior_discrepancy)
-    print(posterior_assimilation_suite.prior_discrepancy)
+    # print(assimilation_suite.chi_squared(nuclear_data=True))
+    # print(assimilation_suite.prior_discrepancy)
+    # print(post_suite.prior_discrepancy)

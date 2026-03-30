@@ -523,6 +523,18 @@ class ApplicationSuite:
         """
         return ApplicationSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.items()})
 
+    def filter(self, filter_fn) -> "ApplicationSuite":
+        """Filter the ApplicationSuite based on a filter function.
+
+        Parameters
+        ----------
+        filter_fn : function
+            A function that takes an Application object as input and returns a boolean
+              indicating whether to include the application in the filtered suite.
+        """
+        filtered_apps = {title: app for title, app in self.applications.items() if filter_fn(app)}
+        return ApplicationSuite(applications=filtered_apps)
+
 
 if __name__ == "__main__":
     # Example usage

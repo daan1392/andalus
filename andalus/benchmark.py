@@ -216,6 +216,16 @@ class Benchmark:
         """
         return self.s.plot(zais=zais, perts=perts, ax=ax, **kwargs)
 
+    def chi_squared(self) -> float:
+        """Calculate the experimental chi-squared value for the benchmark.
+
+        Returns
+        -------
+        float
+            The experimental chi-squared value calculated as ((m - c) / dm)^2.
+        """
+        return ((self.m - self.c) / self.dm) ** 2
+
 
 @dataclass
 class BenchmarkSuite:
@@ -544,6 +554,31 @@ class BenchmarkSuite:
             If a benchmark title in the suite is missing from the index of `new_c`.
         """
         return BenchmarkSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.benchmarks.items()})
+
+    def filter(self, filter_fn) -> "BenchmarkSuite":
+        """Filter the BenchmarkSuite based on a filter function and print a summary of the benchmarks removed.
+
+        Parameters
+        ----------
+        filter_fn : function
+            A function that takes a Benchmark object as input and returns a boolean
+              indicating whether to include the benchmark in the filtered suite.
+
+        Returns
+        -------
+        BenchmarkSuite
+            A new BenchmarkSuite instance containing only the benchmarks for which `filter_fn` returns True.
+        """
+        print(f"Filtering benchmarks using {filter_fn.__class__.__name__}...")
+        print(f"    Filter threshold: {filter_fn.threshold}")
+        print(f"    Initial number of benchmarks: {len(self.benchmarks)}")
+        filtered_benchmarks = {title: bm for title, bm in self.benchmarks.items() if filter_fn(bm)}
+        removed_benchmarks = set(self.benchmarks.keys()) - set(filtered_benchmarks.keys())
+        if removed_benchmarks:
+            print(f"    Removed benchmarks: {', '.join(removed_benchmarks)} \n")
+        else:
+            print("    No benchmarks were removed. \n")
+        return BenchmarkSuite(benchmarks=filtered_benchmarks)
 
 
 if __name__ == "__main__":
