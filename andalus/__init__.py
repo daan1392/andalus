@@ -6,6 +6,7 @@ from .application import Application, ApplicationSuite
 from .assimilation import AssimilationSuite
 from .benchmark import Benchmark, BenchmarkSuite
 from .covariance import Covariance, CovarianceSuite
+from .filters import Chi2Filter, Chi2NuclearDataFilter
 from .sensitivity import Sensitivity
 from .utils import sandwich
 
@@ -24,5 +25,7 @@ __all__ = [
     "CovarianceSuite",
     "Sensitivity",
     "sandwich",
+    "Chi2Filter",
+    "Chi2NuclearDataFilter",
     "__version__",
 ]
