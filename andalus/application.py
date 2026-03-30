@@ -172,6 +172,27 @@ class Application:
         print(f"Type: {self.kind}")
         print(f"Calculated: {self.c} ± {self.dc}")
 
+    def plot_sensitivity(self, zais, perts, ax=None, **kwargs):
+        """Plot the sensitivity profiles for the application.
+
+        Parameters
+        ----------
+        zais : list
+            List of zais to be included in the plot.
+        perts : list
+            List of perts to be included in the plot.
+        ax : plt.Axes, optional
+            Ax for the plot to be displayed. If None, a new figure and axis will be created.
+        **kwargs
+            Additional keyword arguments to be passed to the plotting function.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The Axes object containing the plot.
+        """
+        return self.s.plot_sensitivity(zais=zais, perts=perts, ax=ax, **kwargs)
+
 
 @dataclass
 class ApplicationSuite:

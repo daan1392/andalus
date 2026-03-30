@@ -195,6 +195,27 @@ class Benchmark:
         print(f"Measurement: {self.m} ± {self.dm}")
         print(f"Calculated: {self.c} ± {self.dc}")
 
+    def plot_sensitivity(self, zais, perts, ax=None, **kwargs):
+        """Plot the sensitivity profiles for the specified ZAIs and perturbations.
+
+        Parameters
+        ----------
+        zais : list of int
+            List of ZAIs to include in the plot.
+        perts : list of str
+            List of perturbations to include in the plot.
+        ax : matplotlib.axes.Axes, optional
+            Matplotlib Axes object to plot on. If None, a new figure and axes will be created.
+        **kwargs
+            Additional keyword arguments to pass to the plotting function.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The Axes object containing the plot.
+        """
+        return self.s.plot(zais=zais, perts=perts, ax=ax, **kwargs)
+
 
 @dataclass
 class BenchmarkSuite:
