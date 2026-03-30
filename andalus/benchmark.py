@@ -386,6 +386,22 @@ class BenchmarkSuite:
         )
 
     @classmethod
+    def from_list(cls, benchmarks: list[Benchmark]):
+        """Factory method to create a BenchmarkSuite instance from a list of Benchmark objects.
+
+        Parameters
+        ----------
+        benchmarks : list[Benchmark]
+            A list of Benchmark objects to be included in the suite.
+
+        Returns
+        -------
+        BenchmarkSuite
+            An instance of BenchmarkSuite containing the provided Benchmark objects.
+        """
+        return cls(benchmarks={benchmark.title: benchmark for benchmark in benchmarks})
+
+    @classmethod
     def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
         """Retrieve a set of benchmarks from a database.
 
