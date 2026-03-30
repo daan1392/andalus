@@ -321,6 +321,22 @@ class ApplicationSuite:
         ).fillna(0)
 
     @classmethod
+    def from_list(cls, applications: list[Application]):
+        """Method to create an ApplicationSuite instance from a list of Application objects.
+
+        Parameters
+        ----------
+        applications : list[Application]
+            A list of Application objects to be included in the suite.
+
+        Returns
+        -------
+        ApplicationSuite
+            An instance of ApplicationSuite containing the provided applications.
+        """
+        return cls(applications={app.title: app for app in applications})
+
+    @classmethod
     def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
         """Retrieve a set of applications from a database.
 
