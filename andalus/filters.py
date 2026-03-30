@@ -1,7 +1,6 @@
-from typing import Any
-
 import pandas as pd
 
+from andalus.benchmark import Benchmark
 from andalus.utils import sandwich
 
 
@@ -11,18 +10,18 @@ class Filter:
     Supports composition using bitwise operators (&, |, ~).
     """
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the filter criterion on the given item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the filter criterion on the given benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to be evaluated, typically a Benchmark or Application.
+        benchmark : Benchmark
+            The benchmark to be evaluated, typically a Benchmark or Application.
 
         Returns
         -------
         bool
-            True if the item passes the filter, False otherwise.
+            True if the benchmark passes the filter, False otherwise.
         """
         raise NotImplementedError
 
@@ -83,20 +82,20 @@ class _AndFilter(Filter):
         self.f1 = f1
         self.f2 = f2
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the logical AND on the given item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the logical AND on the given benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to evaluate.
+        benchmark : Benchmark
+            The benchmark to evaluate.
 
         Returns
         -------
         bool
-            True if the item passes both filters, False otherwise.
+            True if the benchmark passes both filters, False otherwise.
         """
-        return self.f1(item) and self.f2(item)
+        return self.f1(benchmark) and self.f2(benchmark)
 
 
 class _OrFilter(Filter):
@@ -115,20 +114,20 @@ class _OrFilter(Filter):
         self.f1 = f1
         self.f2 = f2
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the logical OR on the given item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the logical OR on the given benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to evaluate.
+        benchmark : Benchmark
+            The benchmark to evaluate.
 
         Returns
         -------
         bool
-            True if the item passes at least one of the filters, False otherwise.
+            True if the benchmark passes at least one of the filters, False otherwise.
         """
-        return self.f1(item) or self.f2(item)
+        return self.f1(benchmark) or self.f2(benchmark)
 
 
 class _NotFilter(Filter):
@@ -144,20 +143,20 @@ class _NotFilter(Filter):
         """
         self.f = f
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the logical NOT on the given item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the logical NOT on the given benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to evaluate.
+        benchmark : Benchmark
+            The benchmark to evaluate.
 
         Returns
         -------
         bool
-            True if the item does not pass the underlying filter, False otherwise.
+            True if the benchmark does not pass the underlying filter, False otherwise.
         """
-        return not self.f(item)
+        return not self.f(benchmark)
 
 
 class Chi2Filter(Filter):
@@ -173,34 +172,31 @@ class Chi2Filter(Filter):
         """
         self.threshold = threshold
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the chi-squared criterion on the item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the chi-squared criterion on the benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to evaluate (e.g., Benchmark or Application).
+        benchmark : Benchmark
+            The benchmark to evaluate (e.g., Benchmark or Application).
 
         Returns
         -------
         bool
-            True if the item passes the chi-squared threshold or lacks measurements, False otherwise.
+            True if the benchmark passes the chi-squared threshold or lacks measurements, False otherwise.
         """
         # Benchmarks typically have this method
-        if hasattr(item, "chi_squared"):
-            return item.chi_squared() <= self.threshold
+        if hasattr(benchmark, "chi_squared"):
+            return benchmark.chi_squared() <= self.threshold
 
-        # Fallback for Applications equipped with optional measurements
-        m = getattr(item, "m", None)
-        dm = getattr(item, "dm", None)
-        if m is not None and dm is not None and dm > 0:
-            return ((m - getattr(item, "c", 0)) / dm) ** 2 <= self.threshold
+        m = benchmark.m
+        dm = benchmark.dm
 
-        return True  # Pass-through for entries lacking measurements
+        return ((m - benchmark.c) / dm) ** 2 <= self.threshold
 
 
 class Chi2NuclearDataFilter(Filter):
-    """Filter an item based on the chi2 value calculated including the nuclear data covariance matrix."""
+    """Filter an benchmark based on the chi2 value calculated including the nuclear data covariance matrix."""
 
     def __init__(self, threshold: float, covariance_matrix: pd.DataFrame):
         """Initialize the Chi2 Nuclear Data filter.
@@ -215,35 +211,25 @@ class Chi2NuclearDataFilter(Filter):
         self.threshold = threshold
         self.covariance_matrix = covariance_matrix
 
-    def __call__(self, item: Any) -> bool:
-        """Evaluate the nuclear data-inclusive chi-squared criterion on the item.
+    def __call__(self, benchmark: Benchmark) -> bool:
+        """Evaluate the nuclear data-inclusive chi-squared criterion on the benchmark.
 
         Parameters
         ----------
-        item : Any
-            The item to evaluate (e.g., Benchmark or Application).
+        benchmark : Benchmark
+            The benchmark to evaluate (e.g., Benchmark or Application).
 
         Returns
         -------
         bool
-            True if the item passes the threshold or is missing required attributes, False otherwise.
+            True if the benchmark passes the threshold or is missing required attributes, False otherwise.
         """
-        m = getattr(item, "m", None)
-        dm = getattr(item, "dm", None)
-        if m is None or dm is None:
-            return True
+        m = benchmark.m
+        dm = benchmark.dm
 
-        # Get the sensitivity profile
-        s = getattr(item, "s", None)
-        if s is not None:
-            s = s.iloc[:, 0]
+        v_nd = sandwich(benchmark.s.iloc[:,0], self.covariance_matrix)
 
-        v_nd = sandwich(s, self.covariance_matrix)
+        var_total = dm**2 + benchmark.dc**2 + v_nd
 
-        var_total = dm**2 + getattr(item, "dc", 0) ** 2 + v_nd
-
-        if var_total == 0:
-            return True
-
-        chi2 = ((m - item.c) ** 2) / var_total
+        chi2 = ((m - benchmark.c) ** 2) / var_total
         return chi2 <= self.threshold

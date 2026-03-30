@@ -511,8 +511,7 @@ if __name__ == "__main__":
     from andalus.filters import Chi2Filter
 
     post_suite = (
-        assimilation_suite
-        .filter(Chi2Filter(threshold=5))
+        assimilation_suite.filter(Chi2Filter(threshold=1))
         .filter(Chi2NuclearDataFilter(threshold=1, covariance_matrix=assimilation_suite.covariances.matrix))
         .glls()
         .summarize()
