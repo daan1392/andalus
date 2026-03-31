@@ -51,9 +51,9 @@ def sandwich_binwise(s1, cov, s2=None):
     Parameters
     ----------
     s1 : pd.Series or pd.DataFrame
-        First sensitivity vector. Must have a MultiIndex (ZAI, MT).
+        First sensitivity vector. Must have a MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
     cov : pd.DataFrame
-        Square covariance matrix with MultiIndex (ZAI, MT).
+        Square covariance matrix with MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
     s2 : pd.Series or pd.DataFrame, optional
         Second sensitivity vector. If None, s2 is assumed to be s1.
 
@@ -102,9 +102,9 @@ def uncertainty_reactionwise(s1, cov, s2=None):
     Parameters
     ----------
     s1 : pd.Series or pd.DataFrame
-        First sensitivity vector. Must have a MultiIndex (ZAI, MT).
+        First sensitivity vector. Must have a MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
     cov : pd.DataFrame
-        Square covariance matrix with MultiIndex (ZAI, MT).
+        Square covariance matrix with MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
     s2 : pd.Series or pd.DataFrame, optional
         Second sensitivity vector. If None, s2 is assumed to be s1.
 
