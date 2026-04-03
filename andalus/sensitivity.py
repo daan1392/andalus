@@ -10,7 +10,7 @@ from itertools import product
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sandy import zam2latex
+from sandy.zam import zam2latex
 
 from andalus.constants import MT_TRANSLATION, PERT_LABELS
 from andalus.utils import read_serpent
