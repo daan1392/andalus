@@ -538,11 +538,6 @@ class AssimilationSuite:
             If True, appends isotope definitions to 'adjusted.xsdata'
             formatted for the Serpent Monte Carlo code.
 
-        Returns
-        -------
-        dict
-            A dictionary containing the perturbed data or SANDY output objects.
-
         Raises
         ------
         ValueError
@@ -551,9 +546,6 @@ class AssimilationSuite:
 
         Notes
         -----
-        - The `xsdata` generation uses a specific naming convention for Serpent:
-        The identifier and filename are constructed using the ZAI and temperature.
-        For example, ZAI 92235 at 300K results in a suffix of '.03c'.
         - Currently the method supports perturbations to nubar, cross sections
          and prompt fission neutron energy spectrum.
 
@@ -618,7 +610,7 @@ class AssimilationSuite:
                 smps[35] = sandy.Samples(mf35)
 
             # Apply perturbations to the ENDF6 tape and generate perturbed ACE files
-            perturbations = tape.apply_perturbations(
+            tape.apply_perturbations(
                 smps,
                 to_ace=True,
                 to_file=True,
@@ -635,8 +627,6 @@ class AssimilationSuite:
                     f.write(
                         f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
                     )
-
-        return perturbations
 
 
 if __name__ == "__main__":
