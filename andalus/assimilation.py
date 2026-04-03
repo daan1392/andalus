@@ -567,14 +567,10 @@ class AssimilationSuite:
 
         # Default MT mapping for nubar, cross-sections and fission energy spectrum adjustments.
         if reaction_dict is None:
-            reaction_dict = {
-                31: [456],
-                33: [2, 4, 18, 102],
-                # 34: [340252],
-                35: [35018]
-            }
+            reaction_dict = {31: [456], 33: [2, 4, 18, 102], 34: [340252], 35: [35018]}
 
         def _reindex_to_samples(delta, MAT):
+            """Internal helper to format adjustments for SANDY Samples."""
             tmp = delta.rename_axis(index=["MT", "E_min_eV", "E_max_eV"]).reset_index(name="xs_adjustment")
             tmp["E"] = pd.IntervalIndex.from_arrays(tmp["E_min_eV"], tmp["E_max_eV"], closed="right")
             tmp["MAT"] = MAT
@@ -593,9 +589,7 @@ class AssimilationSuite:
             print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
-            delta_xs = (
-                self.xs_adjustment.loc[zai] + 1
-            )
+            delta_xs = self.xs_adjustment.loc[zai] + 1
 
             tape = sandy.get_endf6_file(library, kind="xs", zam=zai)
 
@@ -637,12 +631,12 @@ class AssimilationSuite:
             if create_xsdata:
                 with open("adjusted.xsdata", "a") as f:
                     filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
-                    perturbed_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
+                    pert_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
                     f.write(
-                        f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai % 1000} {temperature} 0 {perturbed_filename}"
+                        f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
                     )
 
-            return perturbations
+        return perturbations
 
 
 if __name__ == "__main__":
