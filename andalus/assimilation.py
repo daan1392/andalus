@@ -505,6 +505,145 @@ class AssimilationSuite:
         print(f"  Calculated bias: {self.c - self.prior_c}")
         print("")
 
+    def to_ace(
+        self,
+        library: str,
+        reaction_dict=None,
+        verbose: bool = False,
+        temperature: int = 300,
+        create_xsdata: bool = False,
+    ):
+        """
+        Export the current assimilation suite to an adjusted ACE library format via SANDY.
+
+        This method iterates through the unique ZAIs in the cross-section adjustments,
+        retrieves the base ENDF6 files from the specified library, applies the
+        calculated perturbations, and generates ACE files. Optionally, it can
+        append entries to a Serpent-style 'xsdata' directory file.
+
+        Parameters
+        ----------
+        library : str
+            Path to the base ENDF6 library or the name of the library
+            recognized by sandy.
+        reaction_dict : dict, optional
+            A dictionary mapping ENDF6 MT numbers to reaction types.
+            Default handles standard cross-sections (MF31, 33, 34, 35).
+            Format: {MF: [MT_list]}.
+        verbose : bool, default False
+            If True, prints detailed progress and SANDY execution logs.
+        temperature : int, default 300
+            The temperature in Kelvin for the ACE file generation.
+        create_xsdata : bool, default False
+            If True, appends isotope definitions to 'adjusted.xsdata'
+            formatted for the Serpent Monte Carlo code.
+
+        Returns
+        -------
+        dict
+            A dictionary containing the perturbed data or SANDY output objects.
+
+        Raises
+        ------
+        ValueError
+            If `self.xs_adjustment` is None, indicating no posterior
+            have been calculated.
+
+        Notes
+        -----
+        - The `xsdata` generation uses a specific naming convention for Serpent:
+        The identifier and filename are constructed using the ZAI and temperature.
+        For example, ZAI 92235 at 300K results in a suffix of '.03c'.
+        - Currently the method supports perturbations to nubar, cross sections
+         and prompt fission neutron energy spectrum.
+
+        See Also
+        --------
+        sandy.get_endf6_file : The underlying function for library retrieval.
+        sandy.Samples : Object used to containerize perturbations.
+        sandy.Endf6.apply_perturbations : The function that applies perturbations and generates ACE files.
+        """
+        import sandy
+
+        # Default MT mapping for nubar, cross-sections and fission energy spectrum adjustments.
+        if reaction_dict is None:
+            reaction_dict = {
+                31: [456],
+                33: [2, 4, 18, 102],
+                # 34: [340252],
+                35: [35018]
+            }
+
+        def _reindex_to_samples(delta, MAT):
+            tmp = delta.rename_axis(index=["MT", "E_min_eV", "E_max_eV"]).reset_index(name="xs_adjustment")
+            tmp["E"] = pd.IntervalIndex.from_arrays(tmp["E_min_eV"], tmp["E_max_eV"], closed="right")
+            tmp["MAT"] = MAT
+
+            xs_reindexed = pd.DataFrame(tmp.set_index(["MAT", "MT", "E"])["xs_adjustment"].rename("0"))
+            return xs_reindexed
+
+        if self.xs_adjustment is None:
+            raise ValueError(
+                "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+            )
+
+        # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
+        # TODO add option to use parallelization for this loop if there are many ZAIs to process.
+        for zai in self.xs_adjustment.index.get_level_values("ZAI").unique():
+            print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
+            # Extract the adjustments for the current ZAI
+            # Add 1 to convert from relative adjustment to multiplicative factor!
+            delta_xs = (
+                self.xs_adjustment.loc[zai] + 1
+            )
+
+            tape = sandy.get_endf6_file(library, kind="xs", zam=zai)
+
+            mat = tape.mat[0]
+            print(mat)
+
+            # convert adjustments into the correct format for SANDY
+            delta_xs_reindexed = _reindex_to_samples(delta_xs, mat)
+
+            mf31 = delta_xs_reindexed.query(f"MT in {reaction_dict[31]}").copy()
+            mf33 = delta_xs_reindexed.query(f"MT in {reaction_dict[33]}").copy()
+            mf34 = delta_xs_reindexed.query(f"MT in {reaction_dict[34]}").copy()
+            mf34 = mf34.rename(index=lambda x: x - 34000, level="MT")
+            mf35 = delta_xs_reindexed.query(f"MT in {reaction_dict[35]}").copy()
+            mf35 = mf35.rename(index=lambda x: x - 35000, level="MT")
+
+            # Create dictionairy of SANDY Samples objects for the reactions to be perturbed
+            smps = {}
+            if not mf31.empty:
+                smps[31] = sandy.Samples(mf31)
+            if not mf33.empty:
+                smps[33] = sandy.Samples(mf33)
+            if not mf34.empty:
+                smps[34] = sandy.Samples(mf34)
+            if not mf35.empty:
+                smps[35] = sandy.Samples(mf35)
+
+            # Apply perturbations to the ENDF6 tape and generate perturbed ACE files
+            perturbations = tape.apply_perturbations(
+                smps,
+                to_ace=True,
+                to_file=True,
+                ace_kws={"temperature": temperature},
+                verbose=verbose,
+                enable_tqdm=False,
+            )
+
+            # Option to write xsdata file which point to the perturbed ACE files.
+            if create_xsdata:
+                with open("adjusted.xsdata", "a") as f:
+                    filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+                    perturbed_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
+                    f.write(
+                        f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai % 1000} {temperature} 0 {perturbed_filename}"
+                    )
+
+            return perturbations
+
 
 if __name__ == "__main__":
     assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
