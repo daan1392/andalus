@@ -582,6 +582,7 @@ class AssimilationSuite:
             raise ValueError(
                 "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
             )
+        xs_adjustment = self.xs_adjustment
 
         def _zai_to_xsdata_line(zai: int) -> str:
             filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
@@ -592,7 +593,7 @@ class AssimilationSuite:
             print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
-            delta_xs = self.xs_adjustment.loc[zai] + 1
+            delta_xs = xs_adjustment.loc[zai] + 1
 
             tape = sandy.get_endf6_file(library, kind="xs", zam=zai)
 
@@ -632,7 +633,7 @@ class AssimilationSuite:
             return _zai_to_xsdata_line(zai) if create_xsdata else None
 
         # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
-        zais = list(self.xs_adjustment.index.get_level_values("ZAI").unique())
+        zais = list(xs_adjustment.index.get_level_values("ZAI").unique())
         xsdata_lines = []
 
         if parallel:
