@@ -598,7 +598,7 @@ class AssimilationSuite:
             mf35 = delta_xs_reindexed.query(f"MT in {reaction_dict[35]}").copy()
             mf35 = mf35.rename(index=lambda x: x - 35000, level="MT")
 
-            # Create dictionairy of SANDY Samples objects for the reactions to be perturbed
+            # Create dictionary of SANDY Samples objects for the reactions to be perturbed
             smps = {}
             if not mf31.empty:
                 smps[31] = sandy.Samples(mf31)
