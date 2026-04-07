@@ -542,7 +542,7 @@ class AssimilationSuite:
         ------
         ValueError
             If `self.xs_adjustment` is None, indicating no posterior
-            have been calculated.
+            has been calculated.
 
         Notes
         -----
