@@ -512,6 +512,8 @@ class AssimilationSuite:
         verbose: bool = False,
         temperature: int = 300,
         create_xsdata: bool = False,
+        parallel: bool = False,
+        max_workers: int | None = None,
     ):
         """
         Export the current assimilation suite to an adjusted ACE library format via SANDY.
@@ -537,6 +539,11 @@ class AssimilationSuite:
         create_xsdata : bool, default False
             If True, appends isotope definitions to 'adjusted.xsdata'
             formatted for the Serpent Monte Carlo code.
+        parallel : bool, default False
+            If True, process ZAIs concurrently using a thread pool.
+        max_workers : int | None, default None
+            Maximum number of worker threads used when `parallel=True`.
+            If None, Python chooses a default.
 
         Raises
         ------
@@ -576,9 +583,12 @@ class AssimilationSuite:
                 "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
             )
 
-        # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
-        # TODO add option to use parallelization for this loop if there are many ZAIs to process.
-        for zai in self.xs_adjustment.index.get_level_values("ZAI").unique():
+        def _zai_to_xsdata_line(zai: int) -> str:
+            filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            pert_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
+            return f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
+
+        def _process_single_zai(zai: int) -> str | None:
             print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
@@ -619,14 +629,29 @@ class AssimilationSuite:
                 enable_tqdm=False,
             )
 
-            # Option to write xsdata file which point to the perturbed ACE files.
-            if create_xsdata:
-                with open("adjusted.xsdata", "a") as f:
-                    filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
-                    pert_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
-                    f.write(
-                        f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
-                    )
+            return _zai_to_xsdata_line(zai) if create_xsdata else None
+
+        # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
+        zais = list(self.xs_adjustment.index.get_level_values("ZAI").unique())
+        xsdata_lines = []
+
+        if parallel:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for line in executor.map(_process_single_zai, zais):
+                    if line is not None:
+                        xsdata_lines.append(line)
+        else:
+            for zai in zais:
+                line = _process_single_zai(zai)
+                if line is not None:
+                    xsdata_lines.append(line)
+
+        # Write xsdata entries once to avoid concurrent appends when running in parallel.
+        if create_xsdata and xsdata_lines:
+            with open("adjusted.xsdata", "a") as f:
+                f.write("\n".join(xsdata_lines) + "\n")
 
 
 if __name__ == "__main__":
