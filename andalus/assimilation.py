@@ -557,7 +557,8 @@ class AssimilationSuite:
         """
         import sandy
 
-        # Default MT mapping for nubar, cross-sections and fission energy spectrum adjustments.
+        # Default MT mapping for nubar, cross-sections, Elastic scattering cosine
+        # and fission energy spectrum adjustments.
         if reaction_dict is None:
             reaction_dict = {31: [456], 33: [2, 4, 18, 102], 34: [340252], 35: [35018]}
 
@@ -586,7 +587,6 @@ class AssimilationSuite:
             tape = sandy.get_endf6_file(library, kind="xs", zam=zai)
 
             mat = tape.mat[0]
-            print(mat)
 
             # convert adjustments into the correct format for SANDY
             delta_xs_reindexed = _reindex_to_samples(delta_xs, mat)
