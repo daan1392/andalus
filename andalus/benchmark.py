@@ -214,7 +214,7 @@ class Benchmark:
         matplotlib.axes.Axes
             The Axes object containing the plot.
         """
-        return self.s.plot(zais=zais, perts=perts, ax=ax, **kwargs)
+        return self.s.plot_sensitivity(zais=zais, perts=perts, ax=ax, **kwargs)
 
     def chi_squared(self) -> float:
         """Calculate the experimental chi-squared value for the benchmark.
