@@ -281,7 +281,7 @@ class AssimilationSuite:
         if applications:
             zais_set.update(applications.zais)
         zais_list = sorted(list(zais_set))
-        covariances = CovarianceSuite.from_yaml(path, zais=zais_list)
+        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
 
