@@ -437,9 +437,23 @@ class AssimilationSuite:
             prior_c=self.prior_c,
         )
 
+        C_dsds = pd.DataFrame(
+            np.diag(
+                ((posteriorSuite.applications.s * posteriorSuite.applications.ds.values) ** 2).values.reshape(1, -1)[0]
+            ),
+            index=posteriorSuite.applications.ds.index,
+            columns=posteriorSuite.applications.ds.index,
+        )
+        prediction_uncertainty = np.sqrt(sandwich(posteriorSuite.xs_adjustment, C_dsds)) * 1e5
+
         print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")
         print(f"    Posterior chi-squared without nuclear data: {posteriorSuite.chi_squared(nuclear_data=False):.4f}")
+        print(
+            f"    Calculated bias: {posteriorSuite.applications.c - self.applications.c}"
+            rf" $\pm$ {prediction_uncertainty:.5f}"
+        )
         print("")
+
         return posteriorSuite
 
     def individual_chi_squared(self, nuclear_data: bool = False) -> pd.Series:
