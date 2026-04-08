@@ -514,6 +514,7 @@ class AssimilationSuite:
         create_xsdata: bool = False,
         parallel: bool = False,
         max_workers: int | None = None,
+        only_zais_applications: bool = False,
     ):
         """
         Export the current assimilation suite to an adjusted ACE library format via SANDY.
@@ -544,6 +545,8 @@ class AssimilationSuite:
         max_workers : int | None, default None
             Maximum number of worker threads used when `parallel=True`.
             If None, Python chooses a default.
+        only_zais_applications : bool, default False
+            If True, only process ZAIs that are present in the application suite,
 
         Raises
         ------
@@ -634,6 +637,13 @@ class AssimilationSuite:
 
         # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
         zais = list(xs_adjustment.index.get_level_values("ZAI").unique())
+
+        # Only export the ZAIs which are present in application
+        if only_zais_applications:
+            app_zais = set(self.applications.zais) if self.applications else set()
+            zais = [zai for zai in zais if zai in app_zais]
+            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
         xsdata_lines = []
 
         if parallel:
