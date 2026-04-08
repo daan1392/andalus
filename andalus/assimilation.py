@@ -444,7 +444,6 @@ class AssimilationSuite:
             index=posteriorSuite.applications.ds.index,
             columns=posteriorSuite.applications.ds.index,
         )
-
         prediction_uncertainty = np.sqrt(sandwich(posteriorSuite.xs_adjustment, C_dsds)) * 1e5
 
         print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")
