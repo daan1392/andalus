@@ -1,6 +1,14 @@
 import pandas as pd
+import pytest
 
-from andalus.utils import sandwich
+from andalus.utils import sandwich, sandwich_binwise, uncertainty_reactionwise
+
+
+@pytest.fixture
+def test_assimilatin_suite():
+    from andalus.assimilation import AssimilationSuite
+
+    return AssimilationSuite.from_yaml("data/config.yaml")
 
 
 def test_sandwich_basic_vector():
@@ -58,3 +66,41 @@ def test_sandwich_empty_intersection():
     # @ on empty objects may return 0.0 or an empty structure.
     result = sandwich(s1, cov, s2)
     assert result == 0 or (hasattr(result, "empty") and result.empty)
+
+
+def test_binwise_sandwich(test_assimilatin_suite):
+    """Test the binwise sandwich formula."""
+    # Test with a specific benchmark
+    benchmark = test_assimilatin_suite.benchmarks.s["HMF001"]
+    covariances = test_assimilatin_suite.covariances.matrix
+
+    # Calculate the binwise sandwich result
+    result = sandwich_binwise(benchmark, covariances)
+
+    # Check that the result is a Series with expected structure
+    assert isinstance(result, pd.Series)
+    assert result.index.names == [
+        "ZAI_1",
+        "MT_1",
+        "E_min_eV_1",
+        "E_max_eV_1",
+        "ZAI_2",
+        "MT_2",
+        "E_min_eV_2",
+        "E_max_eV_2",
+    ]
+
+    # JEFF-4.0 Uncertainty for HMF001 is around 1.3%
+    assert (result.sum() ** 0.5) >= 0.01000
+
+
+def test_uncertainty_reactionwise(test_assimilatin_suite):
+    """Test the reaction-wise uncertainty calculation."""
+    benchmark = test_assimilatin_suite.benchmarks.s["HMF001"]
+    covariances = test_assimilatin_suite.covariances.matrix
+
+    result = uncertainty_reactionwise(benchmark, covariances)
+
+    assert isinstance(result, pd.Series)
+    assert result.index.names == ["ZAI_1", "MT_1", "ZAI_2", "MT_2"]
+    assert result.sum() != 0

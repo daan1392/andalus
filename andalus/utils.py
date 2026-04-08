@@ -1,5 +1,7 @@
 import warnings
 
+import numpy as np
+import pandas as pd
 import serpentTools
 
 
@@ -42,61 +44,80 @@ def sandwich(s1, cov, s2=None):
     return s1.loc[idx1].T @ cov.loc[idx1, idx2] @ s2.loc[idx2]
 
 
-# def safe_sandwich(s1, cov, s2):
-#     """
-#     Perform the sandwich formula to propagate uncertainties using
-#     first-order Taylor expansion while reporting any missing indices.
+def sandwich_binwise(s1, cov, s2=None):
+    """
+    Calculate the variance contribution ZAI/MT/E pairs.
 
-#     Parameters
-#     ----------
-#     s1 : pd.DataFrame or pd.Series
-#         First sensitivity matrix or vector.
-#     cov : pd.DataFrame
-#         Covariance matrix.
-#     s2 : pd.DataFrame or pd.Series
-#         Second sensitivity matrix or vector.
+    Parameters
+    ----------
+    s1 : pd.Series or pd.DataFrame
+        First sensitivity vector. Must have a MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
+    cov : pd.DataFrame
+        Square covariance matrix with MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
+    s2 : pd.Series or pd.DataFrame, optional
+        Second sensitivity vector. If None, s2 is assumed to be s1.
 
-#     Returns
-#     -------
-#     pd.DataFrame, pd.Series, or float
-#         Result of the sandwich formula.
+    Returns
+    -------
+    pd.Series
+        A Series with a 4-level MultiIndex:
+        (ZAI_1, MT_1, E_min_eV_1, E_max_eV_1, ZAI_2, MT_2, E_min_eV_2, E_max_eV_2) representing the contribution
+        of the correlation between those specific bins.
+    """
+    if not isinstance(s1, pd.Series) and s1.columns.nlevels > 1:
+        raise ValueError("s1 must be a Series or a DataFrame with a single column.")
+    if s2 is not None and not isinstance(s2, pd.Series) and s2.columns.nlevels > 1:
+        raise ValueError("s2 must be a Series or a DataFrame with a single column.")
 
-#     Notes
-#     -----
-#     This function automatically aligns indices by intersection. Any indices
-#     present in one input but missing in others are reported to stdout.
-#     """
-#     # Identify Index Sets
-#     set1 = set(s1.index)
-#     set_cov = set(cov.index)
-#     set2 = set(s2.index)
+    # Align to the covariance matrix
+    s1_aligned = s1.reindex(cov.index).fillna(0).values.flatten()
 
-#     # Calculate Intersection
-#     idx1 = set1.intersection(set_cov)
-#     idx2 = set2.intersection(set_cov)
+    if s2 is not None:
+        s2_aligned = s2.reindex(cov.columns).fillna(0).values.flatten()
+    else:
+        s2_aligned = s1_aligned
 
-#     # Diagnostic Reporting
-#     mismatches = {
-#         "s1 (Sensitivity 1)": set1 - idx1,
-#         "cov (Covariance)": set_cov - idx1 - idx2,
-#         "s2 (Sensitivity 2)": set2 - idx2,
-#     }
+    # Compute weighted matrix
+    weighted_matrix = np.outer(s1_aligned, s2_aligned) * cov.values
 
-#     has_mismatch = any(len(diff) > 0 for diff in mismatches.values())
+    # Rebuild the DataFrame with MultiIndex for both axes
+    df_weighted = pd.DataFrame(weighted_matrix, index=cov.index, columns=cov.columns)
 
-#     if has_mismatch:
-#         print("\n" + "=" * 50)
-#         print("INDEX MISMATCH REPORT")
-#         print("-" * 50)
-#         print(f"{'Source':<20} | {'Count':<6} | {'Missing/Extra Indices'}")
-#         print("-" * 50)
-#         for name, diff in mismatches.items():
-#             if diff:
-#                 display_list = sorted(list(diff))
-#                 # Truncate long lists for readability
-#                 items = f"{display_list[:5]}..." if len(display_list) > 5 else f"{display_list}"
-#                 print(f"{name:<20} | {len(diff):<6} | {items}")
-#         print("=" * 50 + "\n")
+    # Stack the DataFrame
+    contributions = df_weighted.stack(level=list(range(cov.columns.nlevels)))
 
-#     # Calculation
-#     return s1.loc[idx1].T @ cov.loc[idx1, idx2] @ s2.loc[idx2]
+    # Dynamic Naming
+    orig_levels = cov.index.names
+    # We create names for rows (_1) and columns (_2)
+    new_names = [f"{n}_1" for n in orig_levels] + [f"{n}_2" for n in orig_levels]
+
+    contributions.index.names = new_names
+    return contributions
+
+
+def uncertainty_reactionwise(s1, cov, s2=None):
+    """
+    Calculate the variance contribution for each reaction.
+
+    Parameters
+    ----------
+    s1 : pd.Series or pd.DataFrame
+        First sensitivity vector. Must have a MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
+    cov : pd.DataFrame
+        Square covariance matrix with MultiIndex (ZAI, MT, E_min_eV, E_max_eV).
+    s2 : pd.Series or pd.DataFrame, optional
+        Second sensitivity vector. If None, s2 is assumed to be s1.
+
+    Returns
+    -------
+    pd.Series
+        A Series with a MultiIndex (ZAI_1, MT_1, ZAI_2, MT_2) representing the
+        uncertainty contribution of each reaction.
+    """
+    variances = sandwich_binwise(s1, cov, s2).groupby(["ZAI_1", "MT_1", "ZAI_2", "MT_2"]).sum()
+
+    uncertainties = np.sign(variances) * np.sqrt(np.abs(variances))
+
+    sorted_uncertainties = uncertainties.sort_values(ascending=False, key=abs)
+
+    return sorted_uncertainties
