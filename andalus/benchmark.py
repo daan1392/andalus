@@ -214,7 +214,7 @@ class Benchmark:
         matplotlib.axes.Axes
             The Axes object containing the plot.
         """
-        return self.s.plot(zais=zais, perts=perts, ax=ax, **kwargs)
+        return self.s.plot_sensitivity(zais=zais, perts=perts, ax=ax, **kwargs)
 
     def chi_squared(self) -> float:
         """Calculate the experimental chi-squared value for the benchmark.
@@ -433,7 +433,7 @@ class BenchmarkSuite:
         return cls(benchmarks={benchmark.title: benchmark for benchmark in benchmarks})
 
     @classmethod
-    def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
+    def from_hdf5(cls, file_path: str, titles: list | None, kind: str = "keff"):
         """Retrieve a set of benchmarks from a database.
 
         Parameters
@@ -494,12 +494,30 @@ class BenchmarkSuite:
                 )
                 benchmarks[benchmark.title] = benchmark
             elif "hdf5_path" in benchmark_config:
-                benchmark = Benchmark.from_hdf5(
-                    file_path=benchmark_config["hdf5_path"],
-                    title=benchmark_config["title"],
-                    kind=benchmark_config.get("kind", "keff"),
-                )
-                benchmarks[benchmark.title] = benchmark
+                hdf5_path = benchmark_config["hdf5_path"]
+
+                with h5py.File(hdf5_path, "r") as f:
+                    kind = benchmark_config.get("kind")
+                    if kind is None or kind not in f:
+                        kind = "keff"
+
+                titles = benchmark_config.get("titles", benchmark_config.get("title"))
+
+                if titles is None or titles == []:
+                    suite = cls.from_hdf5(file_path=hdf5_path, titles=None, kind=kind)
+                    benchmarks.update(suite.benchmarks)
+                elif isinstance(titles, str):
+                    benchmark = Benchmark.from_hdf5(
+                        file_path=hdf5_path,
+                        title=titles,
+                        kind=kind,
+                    )
+                    benchmarks[benchmark.title] = benchmark
+                elif isinstance(titles, list):
+                    suite = cls.from_hdf5(file_path=hdf5_path, titles=titles, kind=kind)
+                    benchmarks.update(suite.benchmarks)
+                else:
+                    raise TypeError("'title'/'titles' must be a string, list, or None")
 
         return cls(benchmarks=benchmarks)
 

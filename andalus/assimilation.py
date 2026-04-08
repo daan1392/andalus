@@ -281,7 +281,7 @@ class AssimilationSuite:
         if applications:
             zais_set.update(applications.zais)
         zais_list = sorted(list(zais_set))
-        covariances = CovarianceSuite.from_yaml(path, zais=zais_list)
+        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
 
@@ -518,6 +518,165 @@ class AssimilationSuite:
         print(f"  Chi-squared without nuclear data: {self.chi_squared(nuclear_data=False):.4f}")
         print(f"  Calculated bias: {self.c - self.prior_c}")
         print("")
+
+    def to_ace(
+        self,
+        library: str,
+        reaction_dict=None,
+        verbose: bool = False,
+        temperature: int = 300,
+        create_xsdata: bool = False,
+        parallel: bool = False,
+        max_workers: int | None = None,
+        only_zais_applications: bool = False,
+    ):
+        """
+        Export the current assimilation suite to an adjusted ACE library format via SANDY.
+
+        This method iterates through the unique ZAIs in the cross-section adjustments,
+        retrieves the base ENDF6 files from the specified library, applies the
+        calculated perturbations, and generates ACE files. Optionally, it can
+        append entries to a Serpent-style 'xsdata' directory file.
+
+        Parameters
+        ----------
+        library : str
+            Path to the base ENDF6 library or the name of the library
+            recognized by sandy.
+        reaction_dict : dict, optional
+            A dictionary mapping ENDF6 MT numbers to reaction types.
+            Default handles standard cross-sections (MF31, 33, 34, 35).
+            Format: {MF: [MT_list]}.
+        verbose : bool, default False
+            If True, prints detailed progress and SANDY execution logs.
+        temperature : int, default 300
+            The temperature in Kelvin for the ACE file generation.
+        create_xsdata : bool, default False
+            If True, appends isotope definitions to 'adjusted.xsdata'
+            formatted for the Serpent Monte Carlo code.
+        parallel : bool, default False
+            If True, process ZAIs concurrently using a thread pool.
+        max_workers : int | None, default None
+            Maximum number of worker threads used when `parallel=True`.
+            If None, Python chooses a default.
+        only_zais_applications : bool, default False
+            If True, only process ZAIs that are present in the application suite,
+
+        Raises
+        ------
+        ValueError
+            If `self.xs_adjustment` is None, indicating no posterior
+            has been calculated.
+
+        Notes
+        -----
+        - Currently the method supports perturbations to nubar, cross sections
+         and prompt fission neutron energy spectrum.
+
+        See Also
+        --------
+        sandy.get_endf6_file : The underlying function for library retrieval.
+        sandy.Samples : Object used to containerize perturbations.
+        sandy.Endf6.apply_perturbations : The function that applies perturbations and generates ACE files.
+        """
+        import sandy
+
+        # Default MT mapping for nubar, cross-sections, Elastic scattering cosine
+        # and fission energy spectrum adjustments.
+        if reaction_dict is None:
+            reaction_dict = {31: [456], 33: [2, 4, 18, 102], 34: [340252], 35: [35018]}
+
+        def _reindex_to_samples(delta, MAT):
+            """Internal helper to format adjustments for SANDY Samples."""
+            tmp = delta.rename_axis(index=["MT", "E_min_eV", "E_max_eV"]).reset_index(name="xs_adjustment")
+            tmp["E"] = pd.IntervalIndex.from_arrays(tmp["E_min_eV"], tmp["E_max_eV"], closed="right")
+            tmp["MAT"] = MAT
+
+            xs_reindexed = pd.DataFrame(tmp.set_index(["MAT", "MT", "E"])["xs_adjustment"].rename("0"))
+            return xs_reindexed
+
+        if self.xs_adjustment is None:
+            raise ValueError(
+                "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+            )
+        xs_adjustment = self.xs_adjustment
+
+        def _zai_to_xsdata_line(zai: int) -> str:
+            filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            pert_filename = f"{int(zai / 10)}_0.{int(temperature // 100):02}c"
+            return f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
+
+        def _process_single_zai(zai: int) -> str | None:
+            print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
+            # Extract the adjustments for the current ZAI
+            # Add 1 to convert from relative adjustment to multiplicative factor!
+            delta_xs = xs_adjustment.loc[zai] + 1
+
+            tape = sandy.get_endf6_file(library, kind="xs", zam=zai)
+
+            mat = tape.mat[0]
+
+            # convert adjustments into the correct format for SANDY
+            delta_xs_reindexed = _reindex_to_samples(delta_xs, mat)
+
+            mf31 = delta_xs_reindexed.query(f"MT in {reaction_dict[31]}").copy()
+            mf33 = delta_xs_reindexed.query(f"MT in {reaction_dict[33]}").copy()
+            mf34 = delta_xs_reindexed.query(f"MT in {reaction_dict[34]}").copy()
+            mf34 = mf34.rename(index=lambda x: x - 34000, level="MT")
+            mf35 = delta_xs_reindexed.query(f"MT in {reaction_dict[35]}").copy()
+            mf35 = mf35.rename(index=lambda x: x - 35000, level="MT")
+
+            # Create dictionary of SANDY Samples objects for the reactions to be perturbed
+            smps = {}
+            if not mf31.empty:
+                smps[31] = sandy.Samples(mf31)
+            if not mf33.empty:
+                smps[33] = sandy.Samples(mf33)
+            if not mf34.empty:
+                smps[34] = sandy.Samples(mf34)
+            if not mf35.empty:
+                smps[35] = sandy.Samples(mf35)
+
+            # Apply perturbations to the ENDF6 tape and generate perturbed ACE files
+            tape.apply_perturbations(
+                smps,
+                to_ace=True,
+                to_file=True,
+                ace_kws={"temperature": temperature},
+                verbose=verbose,
+                enable_tqdm=False,
+            )
+
+            return _zai_to_xsdata_line(zai) if create_xsdata else None
+
+        # Iterate over each ZAI in the cross-section adjustments and generate perturbed ACE files
+        zais = list(xs_adjustment.index.get_level_values("ZAI").unique())
+
+        # Only export the ZAIs which are present in application
+        if only_zais_applications:
+            app_zais = set(self.applications.zais) if self.applications else set()
+            zais = [zai for zai in zais if zai in app_zais]
+            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
+        xsdata_lines = []
+
+        if parallel:
+            from concurrent.futures import ThreadPoolExecutor
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for line in executor.map(_process_single_zai, zais):
+                    if line is not None:
+                        xsdata_lines.append(line)
+        else:
+            for zai in zais:
+                line = _process_single_zai(zai)
+                if line is not None:
+                    xsdata_lines.append(line)
+
+        # Write xsdata entries once to avoid concurrent appends when running in parallel.
+        if create_xsdata and xsdata_lines:
+            with open("adjusted.xsdata", "a") as f:
+                f.write("\n".join(xsdata_lines) + "\n")
 
 
 if __name__ == "__main__":

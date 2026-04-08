@@ -346,3 +346,13 @@ def test_ck_target_found(assimilation_setup):
     assert isinstance(ck, pd.Series)
     assert len(ck) == 2  # Should exclude the target itself
     assert "HMF001" not in ck.index
+
+
+def test_to_ace_no_posterior(assimilation_setup):
+    """Test conversion to ACE format when no posterior has been calculated."""
+    suite = assimilation_setup
+
+    with pytest.raises(
+        ValueError, match="No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+    ):
+        _ = suite.to_ace(library="jeff_40")
