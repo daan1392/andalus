@@ -8,6 +8,7 @@ from .benchmark import Benchmark, BenchmarkSuite
 from .covariance import Covariance, CovarianceSuite
 from .filters import Chi2Filter, Chi2NuclearDataFilter
 from .sensitivity import Sensitivity
+from .spectrum import FluxSpectrum
 from .utils import sandwich
 
 try:
@@ -23,6 +24,7 @@ __all__ = [
     "BenchmarkSuite",
     "Covariance",
     "CovarianceSuite",
+    "FluxSpectrum",
     "Sensitivity",
     "sandwich",
     "Chi2Filter",
