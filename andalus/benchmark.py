@@ -620,7 +620,6 @@ class BenchmarkSuite:
             A new BenchmarkSuite instance containing only the benchmarks for which `filter_fn` returns True.
         """
         print(f"Filtering benchmarks using {filter_fn.__class__.__name__}...")
-        print(f"    Filter threshold: {filter_fn.threshold}")
         print(f"    Initial number of benchmarks: {len(self.benchmarks)}")
         filtered_benchmarks = {title: bm for title, bm in self.benchmarks.items() if filter_fn(bm)}
         removed_benchmarks = set(self.benchmarks.keys()) - set(filtered_benchmarks.keys())
