@@ -280,7 +280,7 @@ class FluxSpectrum(pd.DataFrame):
         ax.set(
             xscale="log",
             xlabel="Energy (eV)",
-            ylabel=r"$\phi(E)\,/\,\Delta u$ (normalized)",
+            ylabel=r"$\phi(E)\,/\,\Delta u$ (normalized)" if normalize else r"$\phi(E)\,/\,\Delta u$",
         )
         ax.grid(True, which="both", alpha=0.3)
         ax.legend()
