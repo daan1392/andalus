@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from andalus.sensitivity import Sensitivity
+from andalus.spectrum import FluxSpectrum
 from andalus.utils import read_serpent
 
 
@@ -35,6 +36,8 @@ class Benchmark:
         The uncertainty of the calculation.
     s : Sensitivity
         The energy-dependent sensitivity profiles.
+    flux : FluxSpectrum or None, optional
+        The energy-dependent flux spectrum. ``None`` when not available.
     """
 
     title: str
@@ -44,6 +47,7 @@ class Benchmark:
     c: float
     dc: float
     s: Sensitivity
+    flux: FluxSpectrum | None = None
 
     def __post_init__(self):
         if not isinstance(self.title, str):
@@ -60,6 +64,8 @@ class Benchmark:
             raise TypeError(f"Calculated uncertainty {self.dc} must be a number")
         if not isinstance(self.s, Sensitivity):
             raise TypeError(f"Sensitivity {self.s} must be a Sensitivity object")
+        if self.flux is not None and not isinstance(self.flux, FluxSpectrum):
+            raise TypeError(f"Flux {self.flux} must be a FluxSpectrum object or None")
 
     @classmethod
     def from_serpent(
@@ -73,36 +79,44 @@ class Benchmark:
         materials=None,
         zailist=None,
         pertlist=None,
+        flux_det: tuple[str, str] | None = None,
     ):
-        """Method to create a Benchmark object from a serpent output.
+        """Create a Benchmark from Serpent output files.
 
         Parameters
         ----------
         title : str
-            title of the benchmark.
+            Title of the benchmark.
         m : float
-            measurement value.
+            Measured value.
         dm : float
-            measurement uncertainty.
-        results_path : str
-            path to the Serpent _res.m file.
+            Measurement uncertainty.
         sens0_path : str
-            path to the Serpent _sens0.m file.
+            Path to the Serpent ``_sens0.m`` sensitivity file.
+        results_path : str
+            Path to the Serpent ``_res.m`` results file.
         kind : str, optional
-            kind of observable, by default "keff".
-        materials : _type_, optional
-            The material in which the sensitivity is calculated, by default None.
-        zailist : _type_, optional
-            The ZAIs which have to be extracted from the sensitivity file, by default None.
-        pertlist : _type_, optional
-            The perturbations which have to be extracted from the sensitivity file, by default None.
+            Kind of observable, by default ``"keff"``.
+        materials : list of str, optional
+            Materials for which the sensitivity is extracted. Defaults to
+            ``["total"]``.
+        zailist : list of int, optional
+            ZAIs to extract from the sensitivity file. Defaults to all ZAIs
+            present in the file.
+        pertlist : list of str, optional
+            Perturbations to extract from the sensitivity file. Defaults to
+            the standard set of reactions.
+        flux_det : tuple of (str, str), optional
+            A ``(det_name, det_path)`` pair identifying the Serpent detector
+            whose tally is used to build a :class:`FluxSpectrum`. When
+            ``None`` (default) no flux spectrum is attached.
 
         Returns
         -------
-        _type_
-            Returns a Benchmark object with the calculated value and sensitivity data extracted from the Serpent files.
+        Benchmark
+            A Benchmark with the calculated value, sensitivity, and
+            (optionally) flux spectrum extracted from the Serpent files.
         """
-
         if materials is None:
             materials = ["total"]
         if pertlist is None:
@@ -120,7 +134,12 @@ class Benchmark:
             pertlist=pertlist,
         )
 
-        return cls(title=title, kind=kind, m=m, dm=dm, c=c, dc=dc, s=sensitivity)
+        flux = None
+        if flux_det is not None:
+            det_name, det_path = flux_det
+            flux = FluxSpectrum.from_serpent(det_path=det_path, det_name=det_name, title=title)
+
+        return cls(title=title, kind=kind, m=m, dm=dm, c=c, dc=dc, s=sensitivity, flux=flux)
 
     @classmethod
     def from_hdf5(cls, file_path, title: str, kind: str = "keff"):
@@ -134,7 +153,7 @@ class Benchmark:
         title : str
             Title of the benchmark to load.
         kind : str, optional
-            Type of benchmark (e.g., "keff"). Default is "keff".
+            Type of benchmark (e.g., ``"keff"``). Default is ``"keff"``.
 
         Returns
         -------
@@ -153,6 +172,11 @@ class Benchmark:
             c = grp.attrs["c"]
             dc = grp.attrs["dc"]
 
+        try:
+            flux = FluxSpectrum.from_hdf5(file_path, title=title, kind=kind)
+        except KeyError:
+            flux = None
+
         return cls(
             title=title,
             kind=kind,
@@ -161,6 +185,7 @@ class Benchmark:
             c=c,
             dc=dc,
             s=Sensitivity.from_hdf5(file_path, title=title, kind=kind),
+            flux=flux,
         )
 
     def to_hdf5(self, file_path="benchmarks.h5"):
@@ -187,6 +212,9 @@ class Benchmark:
 
         # Save sensitivity DataFrame using pandas to_hdf
         self.s.to_hdf(file_path, key=f"{self.kind}/{self.title}/sensitivity", mode="a", format="table")
+
+        if self.flux is not None:
+            self.flux.to_hdf5(file_path, title=self.title, kind=self.kind)
 
     def print_summary(self):
         """Print a quick summary of a benchmark object."""
@@ -481,6 +509,9 @@ class BenchmarkSuite:
         benchmarks = {}
         for benchmark_config in config.get("benchmarks", []):
             if "sens0_path" in benchmark_config and "results_path" in benchmark_config:
+                flux_det = None
+                if "flux_det_name" in benchmark_config and "flux_det_path" in benchmark_config:
+                    flux_det = (benchmark_config["flux_det_name"], benchmark_config["flux_det_path"])
                 benchmark = Benchmark.from_serpent(
                     title=benchmark_config["title"],
                     m=benchmark_config["m"],
@@ -491,6 +522,7 @@ class BenchmarkSuite:
                     materials=benchmark_config.get("materials"),
                     zailist=benchmark_config.get("zailist"),
                     pertlist=benchmark_config.get("pertlist"),
+                    flux_det=flux_det,
                 )
                 benchmarks[benchmark.title] = benchmark
             elif "hdf5_path" in benchmark_config:

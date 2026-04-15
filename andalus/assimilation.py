@@ -285,6 +285,31 @@ class AssimilationSuite:
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
 
+    def e_index_matrix(self) -> pd.DataFrame:
+        r"""Generate an E-index similarity matrix for the assimilation suite.
+
+        The E-index measures the physical similarity between two sensitivity
+        profiles without the influence of a covariance matrix:
+
+        .. math::
+
+            E_{ij} = \frac{S_i^T S_j}{\sqrt{S_i^T S_i \cdot S_j^T S_j}}
+
+        This is the cosine similarity of the sensitivity vectors.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with shape ``(N, N)`` containing the E-index values
+            between every pair of benchmarks and applications in the suite.
+            Entries are ``NaN`` when either sensitivity vector is all zeros.
+        """
+        s = self.s
+        gram = s.T @ s
+        norms = np.sqrt(np.diag(gram.values))
+        norms_safe = np.where(norms == 0.0, np.nan, norms)
+        return gram.div(norms_safe, axis=0).div(norms_safe, axis=1)
+
     def ck_matrix(self) -> pd.DataFrame:
         """Generate a ck-similarity matrix for the current assimilation suite.
 

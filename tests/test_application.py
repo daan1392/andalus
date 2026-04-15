@@ -1,13 +1,14 @@
-# ...existing code...
 import os
 import tempfile
 from dataclasses import FrozenInstanceError
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
 from andalus.application import Application, ApplicationSuite
 from andalus.sensitivity import Sensitivity
+from andalus.spectrum import FluxSpectrum
 
 
 @pytest.fixture
@@ -318,3 +319,113 @@ class TestApplicationSuiteInitialization:
         assert list(ds_df.columns) == ["HMF001_std", "HMF002_std"]
         # indices should match the sensitivity index from the input sensitivity
         assert list(s_df.index) == list(test_application.s.index)
+
+
+def _make_flux_spectrum(title="HMF001"):
+    """Return a minimal FluxSpectrum for use in application tests."""
+    index = pd.MultiIndex.from_tuples(
+        [(1e-2, 1e2), (1e2, 1e7)],
+        names=["E_min_eV", "E_max_eV"],
+    )
+    return FluxSpectrum(
+        pd.DataFrame({"flux": [0.4, 0.6], "flux_std": [0.01, 0.02]}, index=index),
+        title=title,
+    )
+
+
+class TestApplicationFlux:
+    """Tests for the optional flux field on Application."""
+
+    def test_flux_defaults_to_none(self, test_sensitivity):
+        """Application created without a flux argument has flux=None."""
+        a = Application(
+            title="HMF001",
+            kind="keff",
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+        )
+        assert a.flux is None
+
+    def test_application_accepts_valid_flux(self, test_sensitivity):
+        """Application stores a FluxSpectrum object when one is supplied."""
+        fs = _make_flux_spectrum()
+        a = Application(
+            title="HMF001",
+            kind="keff",
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+            flux=fs,
+        )
+        assert isinstance(a.flux, FluxSpectrum)
+        assert a.flux.title == "HMF001"
+
+    def test_invalid_flux_type_raises(self, test_sensitivity):
+        """Passing a non-FluxSpectrum as flux raises TypeError."""
+        with pytest.raises(TypeError, match="FluxSpectrum"):
+            Application(
+                title="HMF001",
+                kind="keff",
+                c=0.9989,
+                dc=0.00018,
+                s=test_sensitivity,
+                flux="not_a_spectrum",  # type: ignore[arg-type]
+            )
+
+    def test_hdf5_round_trip_with_flux(self, test_sensitivity):
+        """Application with a FluxSpectrum survives a to_hdf5 / from_hdf5 cycle."""
+        fs = _make_flux_spectrum()
+        a = Application(
+            title="HMF001",
+            kind="keff",
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+            flux=fs,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = os.path.join(tmpdir, "app.h5")
+            a.to_hdf5(filepath)
+            loaded = Application.from_hdf5(filepath, title="HMF001")
+
+        assert isinstance(loaded.flux, FluxSpectrum)
+        pd.testing.assert_frame_equal(loaded.flux, fs)
+
+    def test_hdf5_round_trip_without_flux_gives_none(self, test_application):
+        """Application saved without flux is reloaded with flux=None."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = os.path.join(tmpdir, "app.h5")
+            test_application.to_hdf5(filepath)
+            loaded = Application.from_hdf5(filepath, title="HMF001")
+        assert loaded.flux is None
+
+    def test_from_serpent_no_flux_det_gives_none(self):
+        """from_serpent with flux_det=None (default) produces flux=None."""
+        a = Application.from_serpent(
+            title="HMF001",
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
+        )
+        assert a.flux is None
+
+    def test_from_serpent_with_flux_det_calls_flux_spectrum(self):
+        """
+        from_serpent with a flux_det tuple calls FluxSpectrum.from_serpent
+        with the correct arguments and attaches the result to the application.
+        """
+        fake_flux = _make_flux_spectrum("HMF001")
+        with patch("andalus.spectrum.FluxSpectrum.from_serpent", return_value=fake_flux) as mock_fs:
+            a = Application.from_serpent(
+                title="HMF001",
+                results_path="data/hmf001.ser_res.m",
+                sens0_path="data/hmf001.ser_sens0.m",
+                flux_det=("flux_spectrum", "data/hmf001_det0.m"),
+            )
+
+        mock_fs.assert_called_once_with(
+            det_path="data/hmf001_det0.m",
+            det_name="flux_spectrum",
+            title="HMF001",
+        )
+        assert a.flux is fake_flux
