@@ -60,6 +60,18 @@ def test_chi_squared_logic(assimilation_setup):
     assert chi2_nd < chi2
 
 
+def test_e_index_matrix(assimilation_setup):
+    """Verify that the e_index_matrix method returns a DataFrame of the correct shape.
+        And that values are between -1 and 1 (since it's a correlation matrix)."""
+    suite = assimilation_setup
+    e_index = suite.e_index_matrix()
+
+    assert isinstance(e_index, pd.DataFrame)
+    assert e_index.shape == (3,3)
+    assert e_index.values.min() >= -1.0
+    assert e_index.values.max() <= 1.0
+
+
 def test_glls_execution(assimilation_setup):
     """Verify GLLS returns a new suite with updated 'c' values."""
     suite = assimilation_setup
