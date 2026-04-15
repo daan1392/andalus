@@ -1,14 +1,27 @@
 # Installation
 
+## Prerequisites
+
+ANDALUS requires **Python 3.10 or later**. The following dependencies are installed automatically:
+
+| Package | Purpose |
+| --- | --- |
+| `pandas` | Core data structures for sensitivities and covariances |
+| `numpy` | Numerical operations |
+| `serpentTools` | Reading Serpent Monte Carlo output files |
+| `sandy` | Reading ERRORR covariance files and exporting to ACE format |
+| `pyyaml` | Parsing YAML configuration files |
+| `tables` | HDF5 storage via `pandas.HDFStore` |
+
 ## Stable release
 
-To install ANDALUS, run this command in your terminal:
+Install the latest published version from PyPI:
 
 ```sh
 pip install andalus
 ```
 
-Or if you prefer to use `uv`:
+If you prefer [`uv`](https://docs.astral.sh/uv/):
 
 ```sh
 uv add andalus
@@ -16,24 +29,41 @@ uv add andalus
 
 ## From source
 
-The source files for ANDALUS can be downloaded from the [Github repo](https://github.com/daan1392/andalus).
-
-You can either clone the public repository:
+Clone the repository and install in editable mode for development:
 
 ```sh
 git clone https://github.com/daan1392/andalus
-```
-
-Once you have a copy of the source, you can install it with:
-
-```sh
 cd andalus
-pip install .
+pip install -e .
 ```
 
-or
+With `uv` (recommended — also installs dev dependencies from `pyproject.toml`):
 
 ```sh
+git clone https://github.com/daan1392/andalus
 cd andalus
 uv sync
 ```
+
+`uv sync` creates an isolated virtual environment under `.venv/`. Activate it before running commands:
+
+```sh
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+## Verifying the installation
+
+```python
+import andalus
+print(andalus.__version__)
+```
+
+## Optional: NJOY / SANDY for ACE export
+
+The `AssimilationSuite.to_ace()` method requires a working [NJOY](https://www.njoy21.io/) installation
+accessible on your `PATH`, in addition to the `sandy` Python package.  This is only needed when you
+want to export adjusted nuclear data to ACE format for use in a Monte Carlo transport code.
