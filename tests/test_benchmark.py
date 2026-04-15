@@ -1,6 +1,7 @@
 import os
 import tempfile
 from dataclasses import FrozenInstanceError
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,7 @@ import pytest
 
 from andalus.benchmark import Benchmark, BenchmarkSuite
 from andalus.sensitivity import Sensitivity
+from andalus.spectrum import FluxSpectrum
 
 
 @pytest.fixture
@@ -428,3 +430,135 @@ class TestBenchmarkSuiteInitialization:
         assert list(ds_df.columns) == ["HMF001_std", "HMF002_std"]
         # indices should match the sensitivity index from the input sensitivity
         assert list(s_df.index) == list(test_benchmark.s.index)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_flux_spectrum(title="HMF001"):
+    """Return a minimal FluxSpectrum for use in benchmark tests."""
+    index = pd.MultiIndex.from_tuples(
+        [(1e-2, 1e2), (1e2, 1e7)],
+        names=["E_min_eV", "E_max_eV"],
+    )
+    return FluxSpectrum(
+        pd.DataFrame({"flux": [0.4, 0.6], "flux_std": [0.01, 0.02]}, index=index),
+        title=title,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Flux integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBenchmarkFlux:
+    """Tests for the optional flux field on Benchmark."""
+
+    def test_flux_defaults_to_none(self, test_sensitivity):
+        """Benchmark created without a flux argument has flux=None."""
+        b = Benchmark(
+            title="HMF001",
+            kind="keff",
+            m=1.0,
+            dm=0.002,
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+        )
+        assert b.flux is None
+
+    def test_benchmark_accepts_valid_flux(self, test_sensitivity):
+        """Benchmark stores a FluxSpectrum object when one is supplied."""
+        fs = _make_flux_spectrum()
+        b = Benchmark(
+            title="HMF001",
+            kind="keff",
+            m=1.0,
+            dm=0.002,
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+            flux=fs,
+        )
+        assert isinstance(b.flux, FluxSpectrum)
+        assert b.flux.title == "HMF001"
+
+    def test_invalid_flux_type_raises(self, test_sensitivity):
+        """Passing a non-FluxSpectrum as flux raises TypeError."""
+        with pytest.raises(TypeError, match="FluxSpectrum"):
+            Benchmark(
+                title="HMF001",
+                kind="keff",
+                m=1.0,
+                dm=0.002,
+                c=0.9989,
+                dc=0.00018,
+                s=test_sensitivity,
+                flux="not_a_spectrum",  # type: ignore[arg-type]
+            )
+
+    def test_hdf5_round_trip_with_flux(self, test_sensitivity):
+        """Benchmark with a FluxSpectrum survives a to_hdf5 / from_hdf5 cycle."""
+        fs = _make_flux_spectrum()
+        b = Benchmark(
+            title="HMF001",
+            kind="keff",
+            m=1.0,
+            dm=0.002,
+            c=0.9989,
+            dc=0.00018,
+            s=test_sensitivity,
+            flux=fs,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = os.path.join(tmpdir, "bench.h5")
+            b.to_hdf5(filepath)
+            loaded = Benchmark.from_hdf5(filepath, title="HMF001")
+
+        assert isinstance(loaded.flux, FluxSpectrum)
+        pd.testing.assert_frame_equal(loaded.flux, fs)
+
+    def test_hdf5_round_trip_without_flux_gives_none(self, test_benchmark):
+        """Benchmark saved without flux is reloaded with flux=None."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            filepath = os.path.join(tmpdir, "bench.h5")
+            test_benchmark.to_hdf5(filepath)
+            loaded = Benchmark.from_hdf5(filepath, title="HMF001")
+        assert loaded.flux is None
+
+    def test_from_serpent_no_flux_det_gives_none(self):
+        """from_serpent with flux_det=None (default) produces flux=None."""
+        b = Benchmark.from_serpent(
+            title="HMF001",
+            m=1.0,
+            dm=0.002,
+            results_path="data/hmf001.ser_res.m",
+            sens0_path="data/hmf001.ser_sens0.m",
+        )
+        assert b.flux is None
+
+    def test_from_serpent_with_flux_det_calls_flux_spectrum(self):
+        """
+        from_serpent with a flux_det tuple calls FluxSpectrum.from_serpent
+        with the correct arguments and attaches the result to the benchmark.
+        """
+        fake_flux = _make_flux_spectrum("HMF001")
+        with patch("andalus.spectrum.FluxSpectrum.from_serpent", return_value=fake_flux) as mock_fs:
+            b = Benchmark.from_serpent(
+                title="HMF001",
+                m=1.0,
+                dm=0.002,
+                results_path="data/hmf001.ser_res.m",
+                sens0_path="data/hmf001.ser_sens0.m",
+                flux_det=("flux_spectrum", "data/hmf001_det0.m"),
+            )
+
+        mock_fs.assert_called_once_with(
+            det_path="data/hmf001_det0.m",
+            det_name="flux_spectrum",
+            title="HMF001",
+        )
+        assert b.flux is fake_flux
