@@ -192,7 +192,7 @@ class FluxSpectrum(pd.DataFrame):
             title=title,
         )
 
-    def to_hdf5(self, file_path: str, title: str = None, kind: str = "keff") -> None:
+    def to_hdf5(self, file_path: str, title: str = "", kind: str = "keff") -> None:
         """
         Save the ``FluxSpectrum`` to an HDF5 file.
 
@@ -206,7 +206,7 @@ class FluxSpectrum(pd.DataFrame):
             Observable kind used as the top-level HDF5 group
             (e.g., ``"keff"``). Default is ``"keff"``.
         """
-        if title is None:
+        if title == "":
             title = self.title
 
         if self.title != title:
