@@ -12,6 +12,8 @@ benchmarks:
     kind: "keff"
     sens0_path: "../data/hmf001.ser_sens0.m"
     results_path: "../data/hmf001.ser_res.m"
+    flux_det_name: "flux"
+    flux_det_path: "../data/hmf001.ser_det0.m"
 
   - title: "HMF002-001"
     description: "Topsy 8-inch tuballoy reflected oralloy assemblies (sphere)."
