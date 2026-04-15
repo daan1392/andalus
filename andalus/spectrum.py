@@ -210,10 +210,7 @@ class FluxSpectrum(pd.DataFrame):
             title = self.title
 
         if self.title != title:
-            raise ValueError(
-                f"Title mismatch: object title '{self.title}' does not match "
-                f"provided title '{title}'."
-            )
+            raise ValueError(f"Title mismatch: object title '{self.title}' does not match provided title '{title}'.")
 
         self.to_hdf(
             path_or_buf=file_path,
