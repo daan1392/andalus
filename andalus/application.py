@@ -10,6 +10,7 @@ import h5py
 import pandas as pd
 
 from andalus.sensitivity import Sensitivity
+from andalus.spectrum import FluxSpectrum
 from andalus.utils import read_serpent
 
 
@@ -30,6 +31,12 @@ class Application:
         The uncertainty of the calculation.
     s : Sensitivity
         The energy-dependent sensitivity profiles.
+    m : float or None, optional
+        The measured value, if available.
+    dm : float or None, optional
+        The measurement uncertainty, if available.
+    flux : FluxSpectrum or None, optional
+        The energy-dependent flux spectrum. ``None`` when not available.
     """
 
     title: str
@@ -39,6 +46,7 @@ class Application:
     s: Sensitivity
     m: float | None = None
     dm: float | None = None
+    flux: FluxSpectrum | None = None
 
     def __post_init__(self):
         if not isinstance(self.title, str):
@@ -55,6 +63,8 @@ class Application:
             raise TypeError(f"Measured value {self.m} must be a number or None")
         if not isinstance(self.dm, (int, float, type(None))):
             raise TypeError(f"Measured uncertainty {self.dm} must be a number or None")
+        if self.flux is not None and not isinstance(self.flux, FluxSpectrum):
+            raise TypeError(f"Flux {self.flux} must be a FluxSpectrum object or None")
 
     @classmethod
     def from_serpent(
@@ -68,36 +78,44 @@ class Application:
         pertlist=None,
         m: float | None = None,
         dm: float | None = None,
+        flux_det: tuple[str, str] | None = None,
     ):
-        """Method to create an Application object from a serpent output.
+        """Create an Application from Serpent output files.
 
         Parameters
         ----------
         title : str
-            title of the application.
-        results_path : str
-            path to the Serpent _res.m file.
+            Title of the application.
         sens0_path : str
-            path to the Serpent _sens0.m file.
+            Path to the Serpent ``_sens0.m`` sensitivity file.
+        results_path : str
+            Path to the Serpent ``_res.m`` results file.
         kind : str, optional
-            kind of observable, by default "keff".
-        materials : _type_, optional
-            The material in which the sensitivity is calculated, by default None.
-        zailist : _type_, optional
-            The ZAIs which have to be extracted from the sensitivity file, by default None.
-        pertlist : _type_, optional
-            The perturbations which have to be extracted from the sensitivity file, by default None.
+            Kind of observable, by default ``"keff"``.
+        materials : list of str, optional
+            Materials for which the sensitivity is extracted. Defaults to
+            ``["total"]``.
+        zailist : list of int, optional
+            ZAIs to extract from the sensitivity file. Defaults to all ZAIs
+            present in the file.
+        pertlist : list of str, optional
+            Perturbations to extract from the sensitivity file. Defaults to
+            the standard set of reactions.
         m : float, optional
-            Measured value for the application, by default None.
+            Measured value for the application. Default is ``None``.
         dm : float, optional
-            Uncertainty of the measured value, by default None.
+            Measurement uncertainty. Default is ``None``.
+        flux_det : tuple of (str, str), optional
+            A ``(det_name, det_path)`` pair identifying the Serpent detector
+            whose tally is used to build a :class:`FluxSpectrum`. When
+            ``None`` (default) no flux spectrum is attached.
 
         Returns
         -------
-        _type_
-            Returns a Benchmark object with the calculated value and sensitivity data extracted from the Serpent files.
+        Application
+            An Application with the calculated value, sensitivity, and
+            (optionally) flux spectrum extracted from the Serpent files.
         """
-
         if materials is None:
             materials = ["total"]
         if pertlist is None:
@@ -116,7 +134,12 @@ class Application:
             pertlist=pertlist,
         )
 
-        return cls(title=title, kind=kind, c=c, dc=dc, s=sensitivity, m=m, dm=dm)
+        flux = None
+        if flux_det is not None:
+            det_name, det_path = flux_det
+            flux = FluxSpectrum.from_serpent(det_path=det_path, det_name=det_name, title=title)
+
+        return cls(title=title, kind=kind, c=c, dc=dc, s=sensitivity, m=m, dm=dm, flux=flux)
 
     @classmethod
     def from_hdf5(cls, file_path, title: str, kind: str = "keff"):
@@ -149,6 +172,11 @@ class Application:
             m = grp.attrs["m"] if "m" in grp.attrs else None
             dm = grp.attrs["dm"] if "dm" in grp.attrs else None
 
+        try:
+            flux = FluxSpectrum.from_hdf5(file_path, title=title, kind=kind)
+        except KeyError:
+            flux = None
+
         return cls(
             title=title,
             kind=kind,
@@ -157,6 +185,7 @@ class Application:
             s=Sensitivity.from_hdf5(file_path, title=title, kind=kind),
             m=m,
             dm=dm,
+            flux=flux,
         )
 
     def to_hdf5(self, file_path="benchmarks.h5"):
@@ -185,6 +214,9 @@ class Application:
 
         # Save sensitivity DataFrame using pandas to_hdf
         self.s.to_hdf(file_path, key=f"{self.kind}/{self.title}/sensitivity", mode="a", format="table")
+
+        if self.flux is not None:
+            self.flux.to_hdf5(file_path, kind=self.kind)
 
     def print_summary(self):
         """Print a quick summary of an application object."""
@@ -449,6 +481,9 @@ class ApplicationSuite:
         applications = {}
         for application_config in config.get("applications", []):
             if "sens0_path" in application_config and "results_path" in application_config:
+                flux_det = None
+                if "flux_det_name" in application_config and "flux_det_path" in application_config:
+                    flux_det = (application_config["flux_det_name"], application_config["flux_det_path"])
                 application = Application.from_serpent(
                     title=application_config["title"],
                     sens0_path=application_config["sens0_path"],
@@ -459,6 +494,7 @@ class ApplicationSuite:
                     pertlist=application_config.get("pertlist"),
                     m=application_config.get("m") if "m" in application_config else None,
                     dm=application_config.get("dm") if "dm" in application_config else None,
+                    flux_det=flux_det,
                 )
                 applications[application.title] = application
             elif "hdf5_path" in application_config:
