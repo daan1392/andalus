@@ -432,11 +432,6 @@ class TestBenchmarkSuiteInitialization:
         assert list(s_df.index) == list(test_benchmark.s.index)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _make_flux_spectrum(title="HMF001"):
     """Return a minimal FluxSpectrum for use in benchmark tests."""
     index = pd.MultiIndex.from_tuples(
@@ -447,11 +442,6 @@ def _make_flux_spectrum(title="HMF001"):
         pd.DataFrame({"flux": [0.4, 0.6], "flux_std": [0.01, 0.02]}, index=index),
         title=title,
     )
-
-
-# ---------------------------------------------------------------------------
-# Flux integration tests
-# ---------------------------------------------------------------------------
 
 
 class TestBenchmarkFlux:

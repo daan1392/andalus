@@ -9,10 +9,6 @@ import pytest
 
 from andalus.spectrum import FluxSpectrum
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture
 def sample_flux_spectrum():
@@ -75,11 +71,6 @@ def two_bin_equal_flux():
     )
 
 
-# ---------------------------------------------------------------------------
-# Initialization
-# ---------------------------------------------------------------------------
-
-
 class TestFluxSpectrumInitialization:
     """Tests for FluxSpectrum construction and metadata handling."""
 
@@ -116,11 +107,6 @@ class TestFluxSpectrumInitialization:
         assert sliced.title == "TEST"
 
 
-# ---------------------------------------------------------------------------
-# ealf property
-# ---------------------------------------------------------------------------
-
-
 class TestEalf:
     """Tests for the ealf (Energy of Average Lethargy causing Fission) property."""
 
@@ -140,7 +126,7 @@ class TestEalf:
         assert two_bin_equal_flux.ealf == pytest.approx(100.0, rel=1e-9)
 
     def test_ealf_is_float(self, sample_flux_spectrum):
-        """ealf returns a Python float."""
+        """EALF returns a Python float."""
         assert isinstance(sample_flux_spectrum.ealf, float)
 
     def test_ealf_positive(self, sample_flux_spectrum):
@@ -162,11 +148,6 @@ class TestEalf:
         )
         with pytest.raises(ValueError, match="total flux is zero"):
             _ = fs.ealf
-
-
-# ---------------------------------------------------------------------------
-# mean_energy property
-# ---------------------------------------------------------------------------
 
 
 class TestMeanEnergy:
@@ -230,11 +211,6 @@ class TestMeanEnergy:
         for non-negative weights (AM-GM inequality).
         """
         assert sample_flux_spectrum.ealf <= sample_flux_spectrum.mean_energy
-
-
-# ---------------------------------------------------------------------------
-# plot_spectrum
-# ---------------------------------------------------------------------------
 
 
 class TestPlotSpectrum:
@@ -310,11 +286,6 @@ class TestPlotSpectrum:
         ax = sample_flux_spectrum.plot_spectrum()
         assert ax is not None
         plt.close()
-
-
-# ---------------------------------------------------------------------------
-# HDF5 persistence
-# ---------------------------------------------------------------------------
 
 
 class TestFluxSpectrumHDF5:
