@@ -156,9 +156,7 @@ class FluxSpectrum(pd.DataFrame):
         flux = det.tallies.squeeze()
         flux_std = det.errors.squeeze() * np.abs(flux)
 
-        index = pd.MultiIndex.from_arrays(
-            [e_min, e_max], names=["E_min_eV", "E_max_eV"]
-        )
+        index = pd.MultiIndex.from_arrays([e_min, e_max], names=["E_min_eV", "E_max_eV"])
         return cls(
             pd.DataFrame({"flux": flux, "flux_std": flux_std}, index=index),
             title=title or det_name,

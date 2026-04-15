@@ -9,7 +9,6 @@ import pytest
 
 from andalus.spectrum import FluxSpectrum
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -156,9 +155,7 @@ class TestEalf:
 
     def test_ealf_zero_flux_raises(self):
         """ealf raises ValueError when the total flux is zero."""
-        index = pd.MultiIndex.from_tuples(
-            [(1.0, 10.0)], names=["E_min_eV", "E_max_eV"]
-        )
+        index = pd.MultiIndex.from_tuples([(1.0, 10.0)], names=["E_min_eV", "E_max_eV"])
         fs = FluxSpectrum(
             pd.DataFrame({"flux": [0.0], "flux_std": [0.0]}, index=index),
             title="ZERO",
@@ -209,9 +206,7 @@ class TestMeanEnergy:
         When flux is concentrated at the high-energy bin, mean_energy
         should be closer to the high-energy midpoint.
         """
-        index = pd.MultiIndex.from_tuples(
-            [(1.0, 10.0), (1e5, 1e6)], names=["E_min_eV", "E_max_eV"]
-        )
+        index = pd.MultiIndex.from_tuples([(1.0, 10.0), (1e5, 1e6)], names=["E_min_eV", "E_max_eV"])
         fs = FluxSpectrum(
             pd.DataFrame({"flux": [0.01, 1.0], "flux_std": [0.0, 0.0]}, index=index),
             title="WEIGHTED",
@@ -221,9 +216,7 @@ class TestMeanEnergy:
 
     def test_mean_energy_zero_flux_raises(self):
         """mean_energy raises ValueError when the total flux is zero."""
-        index = pd.MultiIndex.from_tuples(
-            [(1.0, 10.0)], names=["E_min_eV", "E_max_eV"]
-        )
+        index = pd.MultiIndex.from_tuples([(1.0, 10.0)], names=["E_min_eV", "E_max_eV"])
         fs = FluxSpectrum(
             pd.DataFrame({"flux": [0.0], "flux_std": [0.0]}, index=index),
             title="ZERO",
@@ -250,6 +243,7 @@ class TestPlotSpectrum:
     def test_returns_axes(self, sample_flux_spectrum):
         """plot_spectrum returns a matplotlib Axes object."""
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -260,6 +254,7 @@ class TestPlotSpectrum:
     def test_accepts_custom_axes(self, sample_flux_spectrum):
         """plot_spectrum plots onto a provided Axes and returns it."""
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -271,6 +266,7 @@ class TestPlotSpectrum:
     def test_x_scale_is_log(self, sample_flux_spectrum):
         """Energy axis must use a logarithmic scale."""
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -281,6 +277,7 @@ class TestPlotSpectrum:
     def test_xlabel_set(self, sample_flux_spectrum):
         """x-axis label should mention Energy."""
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -294,6 +291,7 @@ class TestPlotSpectrum:
         values from the DataFrame.  The total flux is not 1.
         """
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -305,6 +303,7 @@ class TestPlotSpectrum:
     def test_normalize_true_is_default(self, sample_flux_spectrum):
         """Calling plot_spectrum() without normalize succeeds (default=True)."""
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
