@@ -214,7 +214,7 @@ class Benchmark:
         self.s.to_hdf(file_path, key=f"{self.kind}/{self.title}/sensitivity", mode="a", format="table")
 
         if self.flux is not None:
-            self.flux.to_hdf5(file_path, kind=self.kind)
+            self.flux.to_hdf5(file_path, title=self.title, kind=self.kind)
 
     def print_summary(self):
         """Print a quick summary of a benchmark object."""
