@@ -38,7 +38,7 @@ hmi = Benchmark.from_serpent(
     dm=0.0005,
     sens0_path="data/hmi001_sens0.m",
     results_path="data/hmi001_res.m",
-    flux_det=("FLUX", "data/hmi001_det0.m"),
+    flux_det=("flux", "data/hmi001_det0.m"),
 )
 ```
 
