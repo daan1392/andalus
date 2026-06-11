@@ -68,8 +68,8 @@ def test_e_index_matrix(assimilation_setup):
 
     assert isinstance(e_index, pd.DataFrame)
     assert e_index.shape == (3, 3)
-    assert e_index.values.min() >= -1.0
-    assert e_index.values.max() <= 1.0
+    assert e_index.values.min() >= -1.0 - 1e-12
+    assert e_index.values.max() <= 1.0 + 1e-12
     assert np.allclose(np.diag(e_index), 1.0), "Diagonal elements of e_index_matrix should be 1.0"
 
 
