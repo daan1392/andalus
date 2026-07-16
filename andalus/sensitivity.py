@@ -253,17 +253,17 @@ class Sensitivity(pd.DataFrame):
             err = subset.iloc[:, 1] * np.abs(val)
 
             p = ax.step(
-                e_min,
+                e_max,
                 val,
-                where="post",
+                where="pre",
                 label=f"{zam2latex(zai)} {PERT_LABELS.get(pert, pert)}" if "label" not in kwargs else None,
                 **kwargs,
             )
 
-            ax.fill_between(e_min, val - err, val + err, step="post", alpha=0.3, color=p[0].get_color())
+            ax.fill_between(e_max, val - err, val + err, step="pre", alpha=0.3, color=p[0].get_color())
 
         ax.set(xscale="log", xlabel="Energy (eV)", ylabel="Sensitivity / unit lethargy")
-        ax.grid(True, which="both", alpha=0.3)
+        # ax.grid(True, which="both", alpha=0.3)
 
         if ax.get_legend() is not None:
             ax.legend()

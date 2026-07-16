@@ -144,7 +144,9 @@ class Covariance(pd.DataFrame):
         return cov
 
     @classmethod
-    def from_store(cls, store: pd.HDFStore, zai: int, mts: list[int] | None = None) -> "Covariance":
+    def from_store(
+        cls, store: pd.HDFStore, zai: int, mts: list[int] | None = None, backup_store: pd.HDFStore | None = None
+    ) -> "Covariance":
         """
         Extract and reconstruct a Covariance object from an open HDFStore.
 
@@ -156,6 +158,8 @@ class Covariance(pd.DataFrame):
             Nuclide identifier (ZAI).
         mts : list of int, optional
             Filter for specific MT numbers.
+        backup_store : pd.HDFStore, optional
+            An optional backup store to use if the primary store fails the uncertainty check.
 
         Returns
         -------
@@ -188,12 +192,19 @@ class Covariance(pd.DataFrame):
         obj.err = getattr(attrs, "err", None)
 
         if obj.is_unrealistic_uncertainty():
+            nuclide = zam2nuclide(zai)
+            if backup_store is not None and key in backup_store:
+                print(f"Uncertainty for nuclide {nuclide} is too large. Using backup covariance.")
+                return cls.from_store(backup_store, zai, mts, backup_store=None)
+            print(f"Uncertainty for nuclide {nuclide} is too large. No backup covariance available.")
             return cls()
         else:
             return obj
 
     @classmethod
-    def from_hdf5(cls, file_path: str, zai: int, mts: list[int] | None = None) -> "Covariance":
+    def from_hdf5(
+        cls, file_path: str, zai: int, mts: list[int] | None = None, backup_file_path: str | None = None
+    ) -> "Covariance":
         """
         Load a covariance matrix from HDF5 and reconstruct from sparse storage.
 
@@ -205,14 +216,24 @@ class Covariance(pd.DataFrame):
             Nuclide identifier (ZAI).
         mts : list of int, optional
             Filter for specific MT numbers.
+        backup_file_path : str, optional
+            Path to a backup HDF5 file to use if the primary file's uncertainties are unrealistic.
 
         Returns
         -------
         Covariance
             Reconstructed symmetric covariance matrix.
         """
-        with pd.HDFStore(file_path, mode="r") as store:
-            return cls.from_store(store, zai, mts)
+        backup_store = None
+        if backup_file_path is not None:
+            backup_store = pd.HDFStore(backup_file_path, mode="r")
+
+        try:
+            with pd.HDFStore(file_path, mode="r") as store:
+                return cls.from_store(store, zai, mts, backup_store=backup_store)
+        finally:
+            if backup_store is not None:
+                backup_store.close()
 
     @staticmethod
     def _reconstruct_index(store: pd.HDFStore, zai_str: str, attrs) -> pd.Index | pd.MultiIndex:
@@ -336,13 +357,7 @@ class Covariance(pd.DataFrame):
 
     def is_unrealistic_uncertainty(self, threshold=10):
         """Check if diagonal elements (variances) exceed a threshold."""
-        if np.diag(self.values).max() > threshold:
-            print(
-                f"Uncertainty for nuclide {zam2nuclide(self.zai)} is possibly"
-                " too large, returning an empty Covariance instead."
-            )
-            return True
-        return False
+        return np.diag(self.values).max() > threshold
 
 
 @dataclass
@@ -364,7 +379,8 @@ class CovarianceSuite:
 
     @classmethod
     def from_hdf5(
-        cls, file_path: str, zais: list[int] | None = None, mts: list[int] | None = None
+        cls, file_path: str, zais: list[int] | None = None, mts: list[int] | None = None,
+        backup_file_path: str | None = None
     ) -> "CovarianceSuite":
         """
         Load a suite from an HDF5 file.
@@ -377,21 +393,31 @@ class CovarianceSuite:
             List of ZAI values to include in the suite.
         mts : Optional[List[int]]
             List of MT values to include in the suite.
+        backup_file_path : str, optional
+            Path to a backup HDF5 file to use if primary file uncertainties are unrealistic.
 
         Returns
         -------
         CovarianceSuite
             The loaded suite.
         """
-        covs = {}
-        with pd.HDFStore(file_path, mode="r") as store:
-            zai_keys = {key.split("/")[1] for key in store.keys() if key.startswith("/zai_")}
-            for key_name in zai_keys:
-                zai = int(key_name.split("_")[1])
-                if zais is not None and zai not in zais:
-                    continue
+        backup_store = None
+        if backup_file_path is not None:
+            backup_store = pd.HDFStore(backup_file_path, mode="r")
 
-                covs[zai] = Covariance.from_store(store, zai=zai, mts=mts)
+        covs = {}
+        try:
+            with pd.HDFStore(file_path, mode="r") as store:
+                zai_keys = {key.split("/")[1] for key in store.keys() if key.startswith("/zai_")}
+                for key_name in zai_keys:
+                    zai = int(key_name.split("_")[1])
+                    if zais is not None and zai not in zais:
+                        continue
+
+                    covs[zai] = Covariance.from_store(store, zai=zai, mts=mts, backup_store=backup_store)
+        finally:
+            if backup_store is not None:
+                backup_store.close()
 
         return cls.from_dict(covs)
 
@@ -473,7 +499,10 @@ class CovarianceSuite:
         with open(path) as f:
             config = yaml.safe_load(f)
 
-        return cls.from_hdf5(config["covariances"]["file_path"], zais=zais, mts=mts)
+        cov_config = config["covariances"]
+        backup_path = cov_config.get("backup")
+
+        return cls.from_hdf5(cov_config["file_path"], zais=zais, mts=mts, backup_file_path=backup_path)
 
     def get_uncertainties(self) -> pd.Series:
         """

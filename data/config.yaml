@@ -2,6 +2,8 @@
 covariances:
   file_path: "data/covariances_test.h5"
   nuclear_data_library: "TEST"
+  # Optional: backup covariance file path to use if uncertainties in the primary file are unrealistic
+  # backup: "data/covariances_backup.h5"
 
 # List of benchmarks to be loaded into the BenchmarkSuite
 benchmarks:
