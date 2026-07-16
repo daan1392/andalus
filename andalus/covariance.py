@@ -379,8 +379,11 @@ class CovarianceSuite:
 
     @classmethod
     def from_hdf5(
-        cls, file_path: str, zais: list[int] | None = None, mts: list[int] | None = None,
-        backup_file_path: str | None = None
+        cls,
+        file_path: str,
+        zais: list[int] | None = None,
+        mts: list[int] | None = None,
+        backup_file_path: str | None = None,
     ) -> "CovarianceSuite":
         """
         Load a suite from an HDF5 file.
