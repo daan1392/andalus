@@ -41,16 +41,17 @@ class Reaction:
         1-indexed starting position of this reaction's threshold energy
         within the full energy grid.
     xs : np.ndarray
-        Cross-section values, aligned with ``energy_grid[ie - 1 : ie - 1 + len(xs)]``.
+        Cross-section values, aligned with ``energies``.
+    energies : np.ndarray
+        The subset of the full pointwise energy grid this reaction is
+        defined on, i.e. ``energy_grid[ie - 1 : ie - 1 + len(xs)]``,
+        precomputed at parse time so it lines up directly with ``xs``.
     """
 
     mt: int
     ie: int
     xs: np.ndarray
-
-    def energy(self, energy_grid: np.ndarray) -> np.ndarray:
-        """Return the subset of the energy grid this reaction is defined on."""
-        return energy_grid[self.ie - 1 : self.ie - 1 + len(self.xs)]
+    energies: np.ndarray
 
 
 @dataclass
@@ -88,8 +89,8 @@ def read_ace(filepath: str) -> dict:
     -------
     dict
         Dictionary with keys: ``header``, ``nxs``, ``jxs``, ``xss``,
-        ``energy_grid``, ``total_xs``, ``absorption_xs``, ``reactions``, ``nu``,
-        ``raw_lines``.
+        ``xss_tokens``, ``energy_grid``, ``total_xs``, ``absorption_xs``,
+        ``reactions``, ``nu``, ``raw_lines``.
         ``reactions`` maps MT number (including MT=2, elastic) to a :class:`Reaction`.
         ``nu`` is ``None`` for non-fissile isotopes, otherwise a dict with
         keys ``{"prompt", "total"}`` or ``{"nu"}`` (see :func:`_parse_nu`),
@@ -100,10 +101,8 @@ def read_ace(filepath: str) -> dict:
 
     header = _parse_header(lines)
     nxs = _parse_int_block(lines, _N_HEADER_LINES + _N_IZAW_LINES, _N_NXS_LINES)
-    jxs = _parse_int_block(
-        lines, _N_HEADER_LINES + _N_IZAW_LINES + _N_NXS_LINES, _N_JXS_LINES
-    )
-    xss = _parse_xss(lines, nxs)
+    jxs = _parse_int_block(lines, _N_HEADER_LINES + _N_IZAW_LINES + _N_NXS_LINES, _N_JXS_LINES)
+    xss, xss_tokens = _parse_xss(lines, nxs)
 
     nes = nxs[2]  # NXS(3): number of energy points
     ntr = nxs[3]  # NXS(4): number of reactions excluding elastic
@@ -114,8 +113,8 @@ def read_ace(filepath: str) -> dict:
     absorption_xs = xss[esz_start + 2 * nes : esz_start + 3 * nes]
     elastic_xs = xss[esz_start + 3 * nes : esz_start + 4 * nes]
 
-    reactions = {2: Reaction(mt=2, ie=1, xs=elastic_xs)}
-    reactions.update(_parse_reactions(xss, nxs, jxs, ntr))
+    reactions = {2: Reaction(mt=2, ie=1, xs=elastic_xs, energies=energy_grid)}
+    reactions.update(_parse_reactions(xss, nxs, jxs, ntr, energy_grid))
 
     nu = _parse_nu(xss, jxs)
 
@@ -124,6 +123,7 @@ def read_ace(filepath: str) -> dict:
         "nxs": nxs,
         "jxs": jxs,
         "xss": xss,
+        "xss_tokens": xss_tokens,
         "energy_grid": energy_grid,
         "total_xs": total_xs,
         "absorption_xs": absorption_xs,
@@ -148,9 +148,7 @@ def _parse_header(lines: list[str]) -> ACEHeader:
     mat = int(mat_match.group(1)) if mat_match else 0
     title = title_line.rstrip()
 
-    return ACEHeader(
-        zaid=zaid, mass=mass, temperature=temperature, date=date, title=title, mat=mat
-    )
+    return ACEHeader(zaid=zaid, mass=mass, temperature=temperature, date=date, title=title, mat=mat)
 
 
 def _parse_int_block(lines: list[str], start_line: int, n_lines: int) -> list[int]:
@@ -161,15 +159,29 @@ def _parse_int_block(lines: list[str], start_line: int, n_lines: int) -> list[in
     return values
 
 
-def _parse_xss(lines: list[str], nxs: list[int]) -> np.ndarray:
-    """Parse the XSS data array, whose length is given by NXS(1)."""
-    length = nxs[0]
+def _parse_xss(lines: list[str], nxs: list[int]) -> tuple[np.ndarray, list[str]]:
+    """Parse the XSS data array, whose length is given by NXS(1).
+
+    Returns both the parsed floats and the original whitespace-split text
+    token for each entry. ACE ASCII formats some XSS entries (locators,
+    counts, MT numbers) as bare integers and others (actual cross section
+    data) in scientific notation, and which is which depends on the
+    entry's role in the file rather than its numeric value (both ``0``
+    and ``0.0`` appear, formatted differently, a few entries apart) — so
+    the writer cannot reconstruct the original formatting from the value
+    alone. Keeping the original token lets it reproduce unperturbed
+    entries byte-for-byte instead.
+    """
     values = []
+    tokens = []
+    length = nxs[0]
     line_idx = _XSS_START_LINE
     while len(values) < length and line_idx < len(lines):
-        values.extend(float(x) for x in lines[line_idx].split())
+        line_tokens = lines[line_idx].split()
+        tokens.extend(line_tokens)
+        values.extend(float(x) for x in line_tokens)
         line_idx += 1
-    return np.array(values[:length], dtype=np.float64)
+    return np.array(values[:length], dtype=np.float64), tokens[:length]
 
 
 def _parse_nu(xss: np.ndarray, jxs: list[int]) -> dict[str, PolynomialNu | TabulatedNu] | None:
@@ -231,7 +243,7 @@ def _read_nu_table(xss: np.ndarray, start: int) -> PolynomialNu | TabulatedNu:
 
 
 def _parse_reactions(
-    xss: np.ndarray, nxs: list[int], jxs: list[int], ntr: int
+    xss: np.ndarray, nxs: list[int], jxs: list[int], ntr: int, energy_grid: np.ndarray
 ) -> dict[int, Reaction]:
     """Parse the MTR/LSIG/SIG blocks into per-MT cross-section tables."""
     if ntr == 0:
@@ -250,6 +262,6 @@ def _parse_reactions(
         ie = int(xss[pos])
         ne = int(xss[pos + 1])
         xs_vals = xss[pos + 2 : pos + 2 + ne]
-        reactions[int(mt)] = Reaction(mt=int(mt), ie=ie, xs=xs_vals)
+        reactions[int(mt)] = Reaction(mt=int(mt), ie=ie, xs=xs_vals, energies=energy_grid[ie - 1 : ie - 1 + ne])
 
     return reactions
