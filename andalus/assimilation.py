@@ -397,10 +397,10 @@ class AssimilationSuite:
         # Calculate prior covariance matrix of the benchmarks
         cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
-        # Propagate the uncertainty on the sensitivity profiles
+        # Propagate the uncertainty on the sensitivity profiles (ds already stored in relative units)
         cov_ds = (
             pd.DataFrame(
-                np.diag(((self.benchmarks.s * self.benchmarks.ds.values) ** 2).sum(axis=0)),
+                np.diag(((self.benchmarks.ds.values) ** 2).sum(axis=0)),
                 self.benchmarks.s.columns,
                 self.benchmarks.s.columns,
             )
@@ -410,7 +410,7 @@ class AssimilationSuite:
 
         # Build total benchmark covariance before inversion
         cov_exp_calc = pd.DataFrame(
-            np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2),
+            np.diag((self.benchmarks.dm / self.benchmarks.m)**2 + (self.benchmarks.dc / self.benchmarks.c)**2),
             index=cov_prior.index,
             columns=cov_prior.columns,
         )
@@ -485,7 +485,7 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        cov = np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)
+        cov = np.diag((self.benchmarks.dm / self.benchmarks.m)**2 + (self.benchmarks.dc / self.benchmarks.c)**2)
 
         if nuclear_data:
             cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
@@ -510,7 +510,7 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        cov = np.diag(self.benchmarks.dm**2 + self.benchmarks.dc**2)
+        cov = np.diag((self.benchmarks.dm / self.benchmarks.m)**2 + (self.benchmarks.dc / self.benchmarks.c)**2)
 
         if nuclear_data:
             cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
