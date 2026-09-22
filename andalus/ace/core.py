@@ -196,6 +196,8 @@ class ACE:
             if mt not in NU_MTS:
                 raise KeyError(f"MT={mt} is not a supported nu-bar MT. Supported: {sorted(NU_MTS)}")
             key = NU_MTS[mt]
+            if mt == 452 and self.nu is not None and key not in self.nu and "nu" in self.nu:
+                key = "nu"
             if self.nu is None or key not in self.nu:
                 available = sorted(self.nu) if self.nu else []
                 raise KeyError(

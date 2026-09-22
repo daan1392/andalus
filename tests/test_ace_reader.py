@@ -225,6 +225,19 @@ class TestPerturb:
 
 
 class TestPerturbNu:
+    def test_single_nu_table_accepts_mt452(self):
+        ace = ACE.read(H1_PATH)
+        table = TabulatedNu(energy=np.array([1.0, 2.0]), values=np.array([2.0, 3.0]))
+        ace.nu = {"nu": table}
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(452, 0.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        ace.perturb_nu(adjustment)
+
+        np.testing.assert_allclose(table.values, np.array([2.2, 3.3]))
+
     @requires_u235
     def test_bin_edge_convention_and_uncovered_energies(self):
         ace = ACE.read(U235_PATH)
