@@ -54,6 +54,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "ipykernel" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "ty" },
@@ -102,6 +103,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage" },
+    { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "ty" },
