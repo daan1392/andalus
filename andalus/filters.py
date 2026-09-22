@@ -225,13 +225,11 @@ class Chi2NuclearDataFilter(Filter):
             True if the benchmark passes the threshold or is missing required attributes, False otherwise.
         """
         m = benchmark.m
-        c = benchmark.c
+        dm = benchmark.dm
 
         v_nd = sandwich(benchmark.s.iloc[:, 0], self.covariance_matrix)
 
-        # v_nd is a relative (fractional) variance, so dm and dc must be
-        # converted to relative units before combining them.
-        var_total = (benchmark.dm / m) ** 2 + (benchmark.dc / c) ** 2 + v_nd
+        var_total = dm**2 + benchmark.dc**2 + v_nd
 
-        chi2 = ((m - c) / m) ** 2 / var_total
+        chi2 = ((m - benchmark.c) ** 2) / var_total
         return chi2 <= self.threshold
