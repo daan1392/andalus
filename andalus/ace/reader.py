@@ -2,6 +2,14 @@
 
 Parses the ACE directory (NXS/JXS arrays) per the MCNP ACE format
 specification rather than inferring block boundaries heuristically.
+
+References
+----------
+- ACE format specification: https://github.com/nucleardata/ACEFormat
+- `endf-python <https://github.com/paulromano/endf-python>`_'s ``endf.ace``
+  and ``endf.reaction`` modules were used as an independent reference to
+  cross-check the NXS/JXS/XSS parsing and per-reaction threshold logic
+  implemented here.
 """
 
 import re

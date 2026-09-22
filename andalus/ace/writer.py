@@ -1,4 +1,9 @@
-"""Writer for ASCII ACE files."""
+"""Writer for ASCII ACE files.
+
+See ``andalus.ace.reader`` for the format references this module builds on
+(the ACE format specification and the ``endf-python`` reader used for
+cross-checking).
+"""
 
 from __future__ import annotations
 
