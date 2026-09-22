@@ -5,11 +5,14 @@ for assimilation purposes.
 
 __all__ = ["AssimilationSuite"]
 
+import os
 from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
 
+from andalus.ace import ACE
+from andalus.ace.core import NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
@@ -694,6 +697,105 @@ class AssimilationSuite:
         if create_xsdata and xsdata_lines:
             with open("adjusted.xsdata", "a") as f:
                 f.write("\n".join(xsdata_lines) + "\n")
+
+    def to_ace_direct(
+        self,
+        ace_dir: str,
+        out_dir: str,
+        temperature: int = 300,
+        verbose: bool = False,
+        only_zais_applications: bool = False,
+    ) -> list[str]:
+        """
+        Export cross-section (and nu-bar) adjustments directly onto existing ACE files.
+
+        Unlike `to_ace`, which reprocesses each isotope from ENDF via SANDY/NJOY
+        (a matter of minutes per isotope), this method edits an already-processed
+        ACE file's XSS array directly via `andalus.ace.ACE.perturb`/`perturb_nu`,
+        which takes a fraction of a second per isotope. It requires `ace_dir` to
+        already contain one ASCII ACE file per ZAI being adjusted; it does not
+        talk to ENDF or run NJOY.
+
+        Parameters
+        ----------
+        ace_dir : str
+            Directory containing source ACE files, named
+            ``{ZAID}.{temperature_code}c`` (e.g. ``92235.03c`` for U-235 at
+            300 K) — the same naming convention `to_ace`'s xsdata output uses.
+        out_dir : str
+            Directory to write perturbed ACE files to (created if it doesn't
+            exist), using the same filenames as `ace_dir`.
+        temperature : int, default 300
+            Temperature in Kelvin, used to build the ACE filename suffix
+            (e.g. 300 -> "03c").
+        verbose : bool, default False
+            If True, print progress for each ZAI.
+        only_zais_applications : bool, default False
+            If True, only process ZAIs present in the application suite.
+
+        Returns
+        -------
+        list[str]
+            Paths to the written ACE files, one per processed ZAI.
+
+        Raises
+        ------
+        ValueError
+            If `self.xs_adjustment` is None, indicating no posterior has
+            been calculated.
+        FileNotFoundError
+            If the source ACE file for a ZAI is not found in `ace_dir`.
+
+        See Also
+        --------
+        to_ace : The SANDY/NJOY-based equivalent, for isotopes without an
+            already-processed ACE file to perturb directly.
+        andalus.ace.ACE.perturb : Applies pointwise cross-section adjustments.
+        andalus.ace.ACE.perturb_nu : Applies nu-bar adjustments.
+        """
+        if self.xs_adjustment is None:
+            raise ValueError(
+                "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+            )
+        xs_adjustment = self.xs_adjustment
+
+        zais = list(xs_adjustment.index.get_level_values("ZAI").unique())
+        if only_zais_applications:
+            app_zais = set(self.applications.zais) if self.applications else set()
+            zais = [zai for zai in zais if zai in app_zais]
+            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
+        os.makedirs(out_dir, exist_ok=True)
+
+        written_paths = []
+        for zai in zais:
+            filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            in_path = os.path.join(ace_dir, filename)
+            if not os.path.exists(in_path):
+                raise FileNotFoundError(
+                    f"No source ACE file found for ZAI={zai} at '{in_path}'. "
+                    "to_ace_direct requires an already-processed ACE file per ZAI."
+                )
+            if verbose:
+                print(f"Perturbing ZAI={zai} directly from {in_path}...")
+
+            ace = ACE.read(in_path)
+            delta = xs_adjustment.loc[zai]
+
+            nu_mask = delta.index.get_level_values("MT").isin(NU_MTS)
+            xs_delta = delta[~nu_mask]
+            nu_delta = delta[nu_mask]
+
+            if not xs_delta.empty:
+                ace.perturb(xs_delta)
+            if not nu_delta.empty:
+                ace.perturb_nu(nu_delta)
+
+            out_path = os.path.join(out_dir, filename)
+            ace.write(out_path)
+            written_paths.append(out_path)
+
+        return written_paths
 
 
 if __name__ == "__main__":

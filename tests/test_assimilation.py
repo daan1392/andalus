@@ -369,3 +369,59 @@ def test_to_ace_no_posterior(assimilation_setup):
         ValueError, match="No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
     ):
         _ = suite.to_ace(library="jeff_40")
+
+
+def test_to_ace_direct_no_posterior(assimilation_setup):
+    """Test direct conversion to ACE format when no posterior has been calculated."""
+    suite = assimilation_setup
+
+    with pytest.raises(
+        ValueError, match="No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+    ):
+        _ = suite.to_ace_direct(ace_dir="unused", out_dir="unused")
+
+
+def test_to_ace_direct_missing_source_file(assimilation_setup, tmp_path):
+    """Test that a missing source ACE file raises FileNotFoundError."""
+    suite = assimilation_setup
+    suite.xs_adjustment = pd.Series(
+        [0.1],
+        index=pd.MultiIndex.from_tuples([(10010, 102, 1.0, 2.0)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]),
+    )
+
+    with pytest.raises(FileNotFoundError, match="1001.03c"):
+        suite.to_ace_direct(ace_dir=str(tmp_path), out_dir=str(tmp_path / "out"))
+
+
+def test_to_ace_direct_perturbs_and_writes(assimilation_setup, tmp_path):
+    """Test that to_ace_direct perturbs a source ACE file and writes the result."""
+    from andalus.ace import ACE
+
+    suite = assimilation_setup
+
+    ace_dir = tmp_path / "ace"
+    ace_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    import shutil
+
+    source = ACE.read("data/1-H-1g-300.0")
+    energy = source.reactions[102].energies
+    e_lo, e_hi = float(energy[10]), float(energy[50])
+    shutil.copy("data/1-H-1g-300.0", ace_dir / "1001.03c")
+
+    zai = 10010  # ZAID 1001 (H-1), ground state
+    suite.xs_adjustment = pd.Series(
+        [0.2],
+        index=pd.MultiIndex.from_tuples([(zai, 102, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]),
+    )
+
+    written = suite.to_ace_direct(ace_dir=str(ace_dir), out_dir=str(out_dir))
+
+    assert written == [str(out_dir / "1001.03c")]
+    result = ACE.read(written[0])
+
+    in_bin = (energy > e_lo) & (energy <= e_hi)
+    ratio = result.reactions[102].xs / source.reactions[102].xs
+    np.testing.assert_allclose(ratio[in_bin], 1.2, rtol=1e-10)
+    np.testing.assert_allclose(ratio[~in_bin], 1.0, rtol=1e-10)

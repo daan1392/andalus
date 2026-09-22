@@ -10,3 +10,4 @@ Explore these Jupyter Notebooks to see the package in action.
    _collections/examples/covariance_from_errorr
    _collections/examples/least_squares_adjustment
    _collections/examples/flux_spectrum_and_e_index
+   _collections/examples/ace_perturbation
