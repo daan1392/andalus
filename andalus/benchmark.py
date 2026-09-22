@@ -373,17 +373,17 @@ class BenchmarkSuite:
 
     @property
     def cov_m(self) -> pd.DataFrame:
-        """Returns a pd.DataFrame of benchmark measurement covariance in the suite.
+        """Returns a pd.DataFrame of benchmark relative measurement covariance in the suite.
 
         Returns
         -------
         pd.DataFrame
-            DataFrame of benchmark measurement covariance in the suite.
+            DataFrame of benchmark relative measurement covariance in the suite.
         """
         if not self.benchmarks:
             raise AssertionError("No benchmarks in the suite.")
         return pd.DataFrame(
-            data=np.diag([benchmark.dm**2 for benchmark in self.benchmarks.values()]),
+            data=np.diag([(benchmark.dm / benchmark.m) ** 2 for benchmark in self.benchmarks.values()]),
             index=self.titles,
             columns=self.titles,
         )
