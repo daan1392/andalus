@@ -1,6 +1,6 @@
 """Reader for ASCII (Type 1) ACE files.
 
-Parses the ACE directory (NXS/JXS arrays) per the MCNP ACE format
+Parses the ACE directory (NXS/JXS arrays) per the ACE format
 specification rather than inferring block boundaries heuristically.
 
 References
