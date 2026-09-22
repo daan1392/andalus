@@ -12,10 +12,22 @@ from andalus.ace.writer import write_ace
 #: present in the same file (MT=4 is the sum of the MT=51..91 inelastic
 #: levels; MT=101 is the sum of the absorption reactions; MT=27/3/1 are
 #: not emitted as separate ``Reaction`` entries by the reader but are
-#: listed here for completeness). Perturbing one of these directly would
+#: listed here for completeness). Perturbing one of these directly (i.e.
+#: applying the adjustment to the aggregate's own tabulated array) would
 #: silently double-count against its constituent levels once propagated,
-#: so :meth:`ACE.perturb` refuses to touch them.
+#: so :meth:`ACE.perturb` redistributes the adjustment onto whichever of
+#: :data:`AGGREGATE_MEMBERS` are present instead of touching the
+#: aggregate's own array directly.
 AGGREGATE_MTS = frozenset({1, 3, 4, 27, 101})
+
+#: Constituent MTs that sum into each aggregate in :data:`AGGREGATE_MTS`.
+#: Only MT=4 is listed: it is the only one of these that the reader ever
+#: observes as an actual ``Reaction`` entry (MT=1/3/27/101 are either the
+#: ESZ arrays themselves or simply absent from the ACE files this reader
+#: has been tested against), so it is the only one with a verified
+#: constituent mapping. Perturbing MT=1/3/27/101 still raises, since
+#: there is nothing to redistribute onto.
+AGGREGATE_MEMBERS: dict[int, frozenset[int]] = {4: frozenset(range(51, 92))}
 
 #: Fission-family reactions (total, first/second/third/fourth-chance
 #: fission). These produce secondary neutrons, so a perturbation must
@@ -136,6 +148,14 @@ class ACE:
         (``Reaction.ie > 1``), so bin membership is evaluated against that
         reaction's own energy sub-range rather than the full energy grid.
 
+        Aggregate reactions (:data:`AGGREGATE_MTS`, e.g. MT=4) are not
+        perturbed directly — that would double-count against their
+        constituent levels once propagated into ``total_xs``. Instead, the
+        same adjustment is applied to each of the aggregate's constituent
+        MTs that is present in this file (see :data:`AGGREGATE_MEMBERS`),
+        and the aggregate's own tabulated array is then resynced to the
+        new sum of its constituents.
+
         Parameters
         ----------
         xs_adjustment : pd.Series
@@ -149,9 +169,10 @@ class ACE:
             If an MT in ``xs_adjustment`` is not present in this ACE file's
             reactions.
         ValueError
-            If an MT in ``xs_adjustment`` is an aggregate reaction (e.g.
-            MT=4) or a non-cross-section quantity (e.g. MT=444), for which
-            propagation into ``total_xs``/``absorption_xs`` is undefined.
+            If an MT in ``xs_adjustment`` is a non-cross-section quantity
+            (e.g. MT=444, for which propagation into ``total_xs`` is
+            undefined), or an aggregate reaction with no known/present
+            constituents to redistribute the adjustment onto.
         """
         for mt, group in xs_adjustment.groupby(level="MT"):
             if mt not in self.reactions:
@@ -159,15 +180,51 @@ class ACE:
                     f"MT={mt} not found in ACE reactions for ZAID={self.header.zaid}. "
                     f"Available MTs: {sorted(self.reactions)}"
                 )
-            if mt in AGGREGATE_MTS or mt in NON_XS_MTS:
+            if mt in NON_XS_MTS:
                 raise ValueError(
-                    f"MT={mt} cannot be perturbed directly: it is an aggregate or "
-                    "non-cross-section quantity, not an independent reaction. "
-                    "Perturb its constituent MTs instead."
+                    f"MT={mt} cannot be perturbed: it is a non-cross-section quantity, not an independent reaction."
                 )
+            if mt in AGGREGATE_MTS:
+                self._perturb_aggregate(cast("int", mt), group.droplevel("MT"))
+                continue
             rxn = self.reactions[mt]
             delta = _apply_bin_adjustment(rxn.xs, rxn.energies, group.droplevel("MT"))
             self._propagate_to_totals(rxn, delta)
+
+    def _perturb_aggregate(self, mt: int, bins: pd.Series) -> None:
+        """Redistribute an aggregate MT's adjustment onto its present constituents.
+
+        Applies ``bins`` to each constituent reaction individually (through
+        the normal leaf-reaction path, so ``total_xs``/``absorption_xs``
+        stay correct), then resyncs the aggregate's own tabulated array to
+        the new sum of *all* its present constituents over its own energy
+        range — a full recompute rather than a delta, so it is correct
+        even if a constituent was perturbed directly in an earlier call.
+
+        Note this resync only happens when the aggregate itself is
+        perturbed; perturbing a constituent directly (e.g. MT=52 without
+        going through MT=4) leaves the aggregate's own array stale.
+        """
+        members = sorted(m for m in AGGREGATE_MEMBERS.get(mt, ()) if m in self.reactions)
+        if not members:
+            raise ValueError(
+                f"MT={mt} is an aggregate reaction with no known constituent MTs present "
+                f"for ZAID={self.header.zaid}. Cannot redistribute the perturbation."
+            )
+
+        for member_mt in members:
+            rxn = self.reactions[member_mt]
+            delta = _apply_bin_adjustment(rxn.xs, rxn.energies, bins)
+            self._propagate_to_totals(rxn, delta)
+
+        aggregate = self.reactions[mt]
+        aggregate.xs[:] = 0.0
+        agg_start = aggregate.ie - 1
+        for member_mt in members:
+            rxn = self.reactions[member_mt]
+            start = rxn.ie - 1
+            stop = start + len(rxn.xs)
+            aggregate.xs[start - agg_start : stop - agg_start] += rxn.xs
 
     def perturb_nu(self, nu_adjustment: pd.Series) -> None:
         """Apply multigroup adjustments to nu-bar (average neutrons per fission).
@@ -196,6 +253,8 @@ class ACE:
             if mt not in NU_MTS:
                 raise KeyError(f"MT={mt} is not a supported nu-bar MT. Supported: {sorted(NU_MTS)}")
             key = NU_MTS[mt]
+            if mt == 452 and self.nu is not None and key not in self.nu and "nu" in self.nu:
+                key = "nu"
             if self.nu is None or key not in self.nu:
                 available = sorted(self.nu) if self.nu else []
                 raise KeyError(

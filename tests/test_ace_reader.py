@@ -223,8 +223,108 @@ class TestPerturb:
         ace.perturb(adjustment)
         np.testing.assert_allclose(ace.absorption_xs, absorption_before)
 
+    @requires_u235
+    def test_aggregate_mt4_redistributes_to_constituents(self):
+        ace = ACE.read(U235_PATH)
+        levels = [mt for mt in range(51, 92) if mt in ace.reactions]
+        originals = {mt: ace.reactions[mt].xs.copy() for mt in levels}
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        ace.perturb(adjustment)
+
+        for mt in levels:
+            np.testing.assert_allclose(ace.reactions[mt].xs, originals[mt] * 1.1, rtol=1e-10)
+
+    @requires_u235
+    def test_aggregate_mt4_resynced_to_sum_of_constituents(self):
+        ace = ACE.read(U235_PATH)
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        ace.perturb(adjustment)
+
+        aggregate = ace.reactions[4]
+        agg_start = aggregate.ie - 1
+        expected = np.zeros(len(aggregate.xs))
+        for mt in range(51, 92):
+            if mt not in ace.reactions:
+                continue
+            rxn = ace.reactions[mt]
+            start = rxn.ie - 1
+            stop = start + len(rxn.xs)
+            expected[start - agg_start : stop - agg_start] += rxn.xs
+
+        np.testing.assert_allclose(aggregate.xs, expected, rtol=1e-10)
+
+    @requires_u235
+    def test_aggregate_mt4_keeps_totals_consistent(self):
+        ace = ACE.read(U235_PATH)
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        ace.perturb(adjustment)
+        _assert_total_identity(ace)
+
+    @requires_u235
+    def test_aggregate_mt_with_no_present_constituents_raises(self):
+        ace = ACE.read(U235_PATH)
+        # Simulate a file where MT=4 is present but none of its MT=51..91
+        # constituents are (real ACE files always carry both together, but
+        # the guard must still hold if that ever isn't the case).
+        for mt in list(ace.reactions):
+            if 51 <= mt <= 91:
+                del ace.reactions[mt]
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        with pytest.raises(ValueError, match="no known constituent"):
+            ace.perturb(adjustment)
+
+    def test_unmapped_aggregate_mt_raises_keyerror(self):
+        # MT=1/3/27/101 are never parsed as Reaction entries, so they fail the
+        # "not in self.reactions" check before the aggregate-redistribution logic runs.
+        ace = ACE.read(H1_PATH)
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(101, 1.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(KeyError):
+            ace.perturb(adjustment)
+
 
 class TestPerturbNu:
+    def test_single_nu_table_accepts_mt452(self):
+        ace = ACE.read(H1_PATH)
+        table = TabulatedNu(energy=np.array([1.0, 2.0]), values=np.array([2.0, 3.0]))
+        ace.nu = {"nu": table}
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(452, 0.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        ace.perturb_nu(adjustment)
+
+        np.testing.assert_allclose(table.values, np.array([2.2, 3.3]))
+
     @requires_u235
     def test_bin_edge_convention_and_uncovered_energies(self):
         ace = ACE.read(U235_PATH)

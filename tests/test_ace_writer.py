@@ -77,27 +77,20 @@ class TestRoundTrip:
 
     @requires_u235
     def test_perturbed_multi_reaction_u235_reread_matches_in_memory(self, tmp_path):
-        """Round-trip several simultaneous perturbations on U-235: MT=18 (fission),
-        MT=102 (capture), and total nu-bar (MT=452). MT=4 (aggregate inelastic) is
-        confirmed to be rejected rather than silently double-counted against its
-        MT=51..91 sublevels.
+        """Round-trip several simultaneous perturbations on U-235: MT=4 (aggregate
+        inelastic, redistributed onto its present MT=51..91 constituents), MT=18
+        (fission), MT=102 (capture), and total nu-bar (MT=452).
         """
         ace = ACE.read(U235_PATH)
-
-        with pytest.raises(ValueError, match="aggregate"):
-            ace.perturb(
-                pd.Series(
-                    [0.1],
-                    index=pd.MultiIndex.from_tuples([(4, 1.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
-                )
-            )
+        levels = [mt for mt in range(51, 92) if mt in ace.reactions]
 
         fission_energy = ace.reactions[18].energies
         capture_energy = ace.reactions[102].energies
         xs_adjustment = pd.Series(
-            [0.05, -0.03],
+            [0.1, 0.05, -0.03],
             index=pd.MultiIndex.from_tuples(
                 [
+                    (4, float(ace.energy_grid[0]), float(ace.energy_grid[-1])),
                     (18, float(fission_energy[0]), float(fission_energy[-1])),
                     (102, float(capture_energy[0]), float(capture_energy[-1])),
                 ],
@@ -120,6 +113,9 @@ class TestRoundTrip:
         ace.write(str(out))
         reread = ACE.read(str(out))
 
+        np.testing.assert_allclose(reread.reactions[4].xs, ace.reactions[4].xs, rtol=1e-10)
+        for mt in levels:
+            np.testing.assert_allclose(reread.reactions[mt].xs, ace.reactions[mt].xs, rtol=1e-10)
         np.testing.assert_allclose(reread.reactions[18].xs, ace.reactions[18].xs, rtol=1e-10)
         np.testing.assert_allclose(reread.reactions[102].xs, ace.reactions[102].xs, rtol=1e-10)
         np.testing.assert_allclose(reread.total_xs, ace.total_xs, rtol=1e-10)
@@ -129,6 +125,9 @@ class TestRoundTrip:
 
         # sanity: perturbations actually changed something (not accidental no-ops)
         original = ACE.read(U235_PATH)
+        assert not np.allclose(reread.reactions[4].xs, original.reactions[4].xs)
+        for mt in levels:
+            assert not np.allclose(reread.reactions[mt].xs, original.reactions[mt].xs)
         assert not np.allclose(reread.reactions[18].xs, original.reactions[18].xs)
         assert not np.allclose(reread.reactions[102].xs, original.reactions[102].xs)
         assert not np.allclose(reread.nu["total"].values, original.nu["total"].values)
