@@ -405,10 +405,10 @@ class TestBenchmarkSuiteInitialization:
         assert suite.dm["HMF001"] == pytest.approx(0.002)
         assert suite.dm["HMF002"] == pytest.approx(0.003)
 
-        # covariance matrix (diagonal dm^2, off-diagonal zero)
+        # covariance matrix (diagonal relative (dm/m)^2, off-diagonal zero)
         cov = suite.cov_m
         assert isinstance(cov, pd.DataFrame)
-        expected_diag = np.array([0.002**2, 0.003**2])
+        expected_diag = np.array([(0.002 / 1.0) ** 2, (0.003 / 2.0) ** 2])
         assert np.allclose(np.diag(cov.values), expected_diag)
         assert np.allclose(cov.values - np.diag(np.diag(cov.values)), 0)
 
