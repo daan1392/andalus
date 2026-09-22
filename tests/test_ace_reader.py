@@ -222,3 +222,56 @@ class TestPerturb:
         )
         ace.perturb(adjustment)
         np.testing.assert_allclose(ace.absorption_xs, absorption_before)
+
+
+class TestPerturbNu:
+    @requires_u235
+    def test_bin_edge_convention_and_uncovered_energies(self):
+        ace = ACE.read(U235_PATH)
+        table = ace.nu["total"]
+        e_lo, e_hi = float(table.energy[10]), float(table.energy[50])
+        original = table.values.copy()
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(452, e_lo, e_hi)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        ace.perturb_nu(adjustment)
+
+        in_bin = (table.energy > e_lo) & (table.energy <= e_hi)
+        np.testing.assert_allclose(table.values[in_bin], original[in_bin] * 1.1)
+        np.testing.assert_allclose(table.values[~in_bin], original[~in_bin])
+
+    @requires_u235
+    def test_perturbing_total_does_not_change_prompt(self):
+        ace = ACE.read(U235_PATH)
+        prompt_before = ace.nu["prompt"].values.copy()
+        table = ace.nu["total"]
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(452, float(table.energy[0]), float(table.energy[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        ace.perturb_nu(adjustment)
+        np.testing.assert_allclose(ace.nu["prompt"].values, prompt_before)
+
+    @requires_u235
+    def test_unsupported_mt_raises_keyerror(self):
+        ace = ACE.read(U235_PATH)
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(455, 1.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(KeyError):
+            ace.perturb_nu(adjustment)
+
+    def test_missing_nu_table_raises_keyerror(self):
+        ace = ACE.read(H1_PATH)  # non-fissile, no nu block at all
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(452, 1.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(KeyError):
+            ace.perturb_nu(adjustment)

@@ -1,9 +1,11 @@
 """Core ACE class for reading and perturbing ACE data."""
 
+from typing import cast
+
 import numpy as np
 import pandas as pd
 
-from andalus.ace.reader import Reaction, read_ace
+from andalus.ace.reader import PolynomialNu, Reaction, TabulatedNu, read_ace
 from andalus.ace.writer import write_ace
 
 #: Reactions whose cross-section is already the sum of other reactions
@@ -39,6 +41,46 @@ NEUTRON_PRODUCING_MTS = frozenset(
 #: 103/107). Perturbing these has no well-defined effect on totals, so
 #: they are excluded from automatic total/absorption propagation.
 NON_XS_MTS = frozenset({203, 204, 205, 206, 207, 444})
+
+#: ENDF reaction identifiers for nu-bar (average neutrons per fission),
+#: mapped to the corresponding key in :attr:`ACE.nu`. MT=455 (delayed
+#: nu-bar) is intentionally not included: the reader does not parse a
+#: separate delayed-nu table.
+NU_MTS = {452: "total", 456: "prompt"}
+
+
+def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Series) -> np.ndarray:
+    """Apply relative multigroup adjustments to a pointwise array in place.
+
+    A pointwise energy exactly on a bin edge is assigned to the
+    higher-energy bin (``E_min < E <= E_max``). Energies not covered by
+    any bin are left unperturbed (factor 1.0).
+
+    Parameters
+    ----------
+    values : np.ndarray
+        Pointwise values to perturb in place (e.g. ``Reaction.xs`` or a
+        nu-bar table's ``values``).
+    energies : np.ndarray
+        The energy grid ``values`` is aligned with.
+    bins : pd.Series
+        Series indexed by ``(E_min_eV, E_max_eV)`` with relative
+        adjustments, applied via ``1 + adjustment``.
+
+    Returns
+    -------
+    np.ndarray
+        The delta added to ``values`` (``values`` after minus before).
+    """
+    factor = np.ones(len(values))
+    for edges, adjustment in bins.items():
+        e_min, e_max = cast("tuple[float, float]", edges)
+        mask = (energies > e_min) & (energies <= e_max)
+        factor[mask] *= 1.0 + adjustment
+
+    delta = values * (factor - 1.0)
+    values += delta
+    return delta
 
 
 class ACE:
@@ -124,16 +166,50 @@ class ACE:
                     "Perturb its constituent MTs instead."
                 )
             rxn = self.reactions[mt]
-            rxn_energy = rxn.energies
-
-            factor = np.ones(len(rxn.xs))
-            for (e_min, e_max), adjustment in group.droplevel("MT").items():
-                mask = (rxn_energy > e_min) & (rxn_energy <= e_max)
-                factor[mask] *= 1.0 + adjustment
-
-            delta = rxn.xs * (factor - 1.0)
-            rxn.xs += delta
+            delta = _apply_bin_adjustment(rxn.xs, rxn.energies, group.droplevel("MT"))
             self._propagate_to_totals(rxn, delta)
+
+    def perturb_nu(self, nu_adjustment: pd.Series) -> None:
+        """Apply multigroup adjustments to nu-bar (average neutrons per fission).
+
+        Same convention as :meth:`perturb`: a `pd.Series` with MultiIndex
+        ``(MT, E_min_eV, E_max_eV)``, where MT is 452 (total nu-bar) or 456
+        (prompt nu-bar), containing relative adjustments applied via
+        ``1 + adjustment`` over ``(E_min, E_max]``.
+
+        Parameters
+        ----------
+        nu_adjustment : pd.Series
+            Series with MultiIndex (MT, E_min_eV, E_max_eV), MT in {452, 456}.
+
+        Raises
+        ------
+        KeyError
+            If MT is not 452/456, or the corresponding nu-bar table is not
+            present in this ACE file.
+        NotImplementedError
+            If the corresponding nu-bar table is a :class:`PolynomialNu`
+            rather than a :class:`TabulatedNu` (only tabulated nu-bar can
+            be perturbed bin-wise).
+        """
+        for mt, group in nu_adjustment.groupby(level="MT"):
+            if mt not in NU_MTS:
+                raise KeyError(f"MT={mt} is not a supported nu-bar MT. Supported: {sorted(NU_MTS)}")
+            key = NU_MTS[mt]
+            if self.nu is None or key not in self.nu:
+                available = sorted(self.nu) if self.nu else []
+                raise KeyError(
+                    f"Nu-bar table '{key}' (MT={mt}) not found for ZAID={self.header.zaid}. "
+                    f"Available nu-bar tables: {available}"
+                )
+            table = self.nu[key]
+            if isinstance(table, PolynomialNu):
+                raise NotImplementedError(
+                    f"MT={mt} nu-bar for ZAID={self.header.zaid} is a polynomial table; "
+                    "only tabulated nu-bar can be perturbed."
+                )
+            assert isinstance(table, TabulatedNu)
+            _apply_bin_adjustment(table.values, table.energy, group.droplevel("MT"))
 
     def _propagate_to_totals(self, rxn: Reaction, delta: np.ndarray) -> None:
         """Keep ``total_xs`` (and ``absorption_xs``) consistent after a perturbation.
