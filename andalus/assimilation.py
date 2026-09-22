@@ -429,14 +429,15 @@ class AssimilationSuite:
         # Calculate difference between experimental and calculated values
         b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
 
-        idx = self.benchmarks.s.index.intersection(self.covariances.matrix.index)
-        A = self.covariances.matrix.loc[idx, idx] @ self.benchmarks.s.loc[idx]
+        # Use the full prior covariance index rather than intersecting it down to the
+        idx = self.covariances.matrix.index
+        s_full = self.benchmarks.s.reindex(idx, fill_value=0.0)
+        A = self.covariances.matrix.loc[idx, idx] @ s_full
 
         dx = A @ C_inv @ b
-        Vx_post = self.covariances.matrix.copy()
-        Vx_post.loc[idx, idx] -= A @ C_inv @ A.T
+        Vx_post = self.covariances.matrix.loc[idx, idx] - A @ C_inv @ A.T
 
-        c_ = self.benchmarks.c + self.benchmarks.s.loc[idx].T @ dx.loc[idx] * self.benchmarks.c
+        c_ = self.benchmarks.c + s_full.T @ dx.loc[idx] * self.benchmarks.c
 
         idx_a = self.applications.s.index.intersection(idx)
         c_a = self.applications.c + self.applications.s.loc[idx_a].T @ dx.loc[idx_a] * self.applications.c
