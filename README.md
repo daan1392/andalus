@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/source/_static/andalus_logo.png" />
+  <img src="docs/source/_static/andalus_logo.png" width="420" height="auto" />
 </p>
 
 <h3 align="center">Applied Nuclear Data Assimilation using Least sqUareS</h5>
