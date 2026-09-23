@@ -382,7 +382,7 @@ The HDF5 layout is:
 
 ### `sandwich`
 
-The core $\mathbf{s}_1^\top \mathbf{C} \, \mathbf{s}_2$ operation used throughout uncertainty
+The core $\mathbf{s}_1^T \mathbf{M} \, \mathbf{s}_2$ operation used throughout uncertainty
 propagation:
 
 ```python
