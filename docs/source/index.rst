@@ -2,6 +2,10 @@
 
 ANDALUS documentation
 =====================
+.. figure:: _static/andalus_logo.png
+   :width: 400px
+   :align: center
+   :alt: Data assimilation workflow
 
 **Applied Nuclear Data Assimilation using Least sqUareS** (ANDALUS) is an open-source Python library
 for improving predictions of nuclear systems through the generalized linear least squares (GLLS) method.

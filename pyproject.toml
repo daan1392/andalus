@@ -61,6 +61,7 @@ docs = [
     "sphinx-collections>=0.3.1",
     "pypandoc-binary>=1.16.2",
     "pydata-sphinx-theme>=0.16.1",
+    "sphinx-breeze-theme>=0.1.0",
 ]
 
 [project.urls]

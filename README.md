@@ -9,8 +9,9 @@
   </a>
 </p>
 
-<h1 align="center">ANDALUS</h1>
-
+<p align="center">
+  <img src="docs/source/_static/andalus_logo.png" />
+</p>
 
 <h3 align="center">Applied Nuclear Data Assimilation using Least sqUareS</h5>
 

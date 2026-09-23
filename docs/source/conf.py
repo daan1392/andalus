@@ -55,10 +55,11 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 # html_theme = "pydata_sphinx_theme"
-html_theme = "sphinx_rtd_theme"
+html_theme = "breeze"
+# html_theme = "sphinx_rtd_theme"
 html_static_path = ["_static"]
-html_logo = "_static/data-assimilation.png"
-html_favicon = "_static/data-assimilation.png"
+html_logo = "_static/andalus_logo.png"
+html_favicon = "_static/andalus_favicon.png"
 
 
 def setup(app):
