@@ -1,5 +1,6 @@
 """Core ACE class for reading and perturbing ACE data."""
 
+import warnings
 from typing import cast
 
 import numpy as np
@@ -12,22 +13,32 @@ from andalus.ace.writer import write_ace
 #: present in the same file (MT=4 is the sum of the MT=51..91 inelastic
 #: levels; MT=101 is the sum of the absorption reactions; MT=27/3/1 are
 #: not emitted as separate ``Reaction`` entries by the reader but are
-#: listed here for completeness). Perturbing one of these directly (i.e.
+#: listed here for completeness). These are always present *alongside*
+#: their constituents when the reader observes them (e.g. MT=4 and
+#: MT=51..91 both appear), so perturbing one of these directly (i.e.
 #: applying the adjustment to the aggregate's own tabulated array) would
-#: silently double-count against its constituent levels once propagated,
-#: so :meth:`ACE.perturb` redistributes the adjustment onto whichever of
-#: :data:`AGGREGATE_MEMBERS` are present instead of touching the
-#: aggregate's own array directly.
+#: silently double-count against its constituent levels once propagated;
+#: :meth:`ACE.perturb` therefore always redistributes the adjustment onto
+#: whichever of :data:`AGGREGATE_MEMBERS` are present, regardless of
+#: whether the aggregate's own array is present too. Contrast with
+#: MT=18 (see :data:`AGGREGATE_MEMBERS`), which is only ever treated as an
+#: aggregate when it is itself absent.
 AGGREGATE_MTS = frozenset({1, 3, 4, 27, 101})
 
-#: Constituent MTs that sum into each aggregate in :data:`AGGREGATE_MTS`.
-#: Only MT=4 is listed: it is the only one of these that the reader ever
-#: observes as an actual ``Reaction`` entry (MT=1/3/27/101 are either the
-#: ESZ arrays themselves or simply absent from the ACE files this reader
-#: has been tested against), so it is the only one with a verified
-#: constituent mapping. Perturbing MT=1/3/27/101 still raises, since
-#: there is nothing to redistribute onto.
-AGGREGATE_MEMBERS: dict[int, frozenset[int]] = {4: frozenset(range(51, 92))}
+#: Constituent MTs that sum into each aggregate MT. MT=4 (see
+#: :data:`AGGREGATE_MTS`) is always redistributed onto its MT=51..91
+#: constituents. MT=18 (total fission) is different: ACE files tabulate
+#: it *either* directly (the common case for isotopes without multi-chance
+#: fission data, e.g. U-235) *or* as separate first/second/third/fourth-chance
+#: fission reactions (MT=19/20/21/38) with no MT=18 array at all (e.g.
+#: U-234) — never both. So MT=18 is perturbed directly like any other leaf
+#: reaction when present, and only redistributed onto its constituents (with
+#: a warning, since there's no aggregate array to resync) when it is absent;
+#: see the ``mt not in self.reactions`` branch in :meth:`ACE.perturb`.
+AGGREGATE_MEMBERS: dict[int, frozenset[int]] = {
+    4: frozenset(range(51, 92)),
+    18: frozenset({19, 20, 21, 38}),
+}
 
 #: Fission-family reactions (total, first/second/third/fourth-chance
 #: fission). These produce secondary neutrons, so a perturbation must
@@ -171,9 +182,13 @@ class ACE:
         perturbed directly — that would double-count against their
         constituent levels once propagated into ``total_xs``. Instead, the
         same adjustment is applied to each of the aggregate's constituent
-        MTs that is present in this file (see :data:`AGGREGATE_MEMBERS`),
-        and the aggregate's own tabulated array is then resynced to the
-        new sum of its constituents.
+        MTs that is present in this file (see :data:`AGGREGATE_MEMBERS`).
+        If the aggregate's own tabulated array is present in this file (not
+        every ACE file emits one, e.g. some isotopes carry MT=51..91 but no
+        separate MT=4), it is resynced to the new sum of its constituents;
+        otherwise only the constituents are perturbed and a
+        :class:`UserWarning` is raised to flag that there was no aggregate
+        array to resync.
 
         Parameters
         ----------
@@ -186,7 +201,8 @@ class ACE:
         ------
         KeyError
             If an MT in ``xs_adjustment`` is not present in this ACE file's
-            reactions.
+            reactions, and is not an aggregate reaction with present
+            constituents to redistribute onto instead.
         ValueError
             If an MT in ``xs_adjustment`` is a non-cross-section quantity
             (e.g. MT=444, for which propagation into ``total_xs`` is
@@ -194,6 +210,9 @@ class ACE:
             constituents to redistribute the adjustment onto.
         """
         for mt, group in xs_adjustment.groupby(level="MT"):
+            if mt in AGGREGATE_MTS or (mt not in self.reactions and mt in AGGREGATE_MEMBERS):
+                self._perturb_aggregate(cast("int", mt), group.droplevel("MT"))
+                continue
             if mt not in self.reactions:
                 raise KeyError(
                     f"MT={mt} not found in ACE reactions for ZAID={self.header.zaid}. "
@@ -203,9 +222,6 @@ class ACE:
                 raise ValueError(
                     f"MT={mt} cannot be perturbed: it is a non-cross-section quantity, not an independent reaction."
                 )
-            if mt in AGGREGATE_MTS:
-                self._perturb_aggregate(cast("int", mt), group.droplevel("MT"))
-                continue
             rxn = self.reactions[mt]
             delta = _apply_bin_adjustment(rxn.xs, rxn.energies, group.droplevel("MT"))
             self._propagate_to_totals(rxn, delta)
@@ -215,14 +231,18 @@ class ACE:
 
         Applies ``bins`` to each constituent reaction individually (through
         the normal leaf-reaction path, so ``total_xs``/``absorption_xs``
-        stay correct), then resyncs the aggregate's own tabulated array to
-        the new sum of *all* its present constituents over its own energy
-        range — a full recompute rather than a delta, so it is correct
-        even if a constituent was perturbed directly in an earlier call.
+        stay correct). If the aggregate's own array is present in this
+        file, it is then resynced to the new sum of *all* its present
+        constituents over its own energy range — a full recompute rather
+        than a delta, so it is correct even if a constituent was perturbed
+        directly in an earlier call. Some ACE files carry the constituent
+        levels (e.g. MT=51..91) without a separate MT=4 array, in which
+        case there is nothing to resync, only the constituents are
+        perturbed, and a :class:`UserWarning` is issued.
 
-        Note this resync only happens when the aggregate itself is
+        Note the resync only happens when the aggregate itself is
         perturbed; perturbing a constituent directly (e.g. MT=52 without
-        going through MT=4) leaves the aggregate's own array stale.
+        going through MT=4) leaves a present aggregate's own array stale.
         """
         members = sorted(m for m in AGGREGATE_MEMBERS.get(mt, ()) if m in self.reactions)
         if not members:
@@ -235,6 +255,14 @@ class ACE:
             rxn = self.reactions[member_mt]
             delta = _apply_bin_adjustment(rxn.xs, rxn.energies, bins)
             self._propagate_to_totals(rxn, delta)
+
+        if mt not in self.reactions:
+            warnings.warn(
+                f"MT={mt} not found in ACE reactions for ZAID={self.header.zaid}; the adjustment was "
+                f"applied to its present constituents ({members}) but there is no aggregate array to resync.",
+                stacklevel=2,
+            )
+            return
 
         aggregate = self.reactions[mt]
         aggregate.xs[:] = 0.0

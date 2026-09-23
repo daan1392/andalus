@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from andalus.ace import ACE
-from andalus.ace.core import NU_MTS
+from andalus.ace.core import CHI_MF, NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
@@ -25,8 +25,13 @@ def _parse_xsdata(path: str) -> dict[int, str]:
 
     Adapted from `endf.ace.get_libraries_from_xsdata
     <https://github.com/paulromano/endf-python/blob/main/src/endf/ace.py>`_
-    by Paul Romano, keyed by ZA (word[2]) instead of returning an ordered
-    list, so it can be looked up per ZAI.
+    by Paul Romano, keyed by ZA (word[3]) instead of returning an ordered
+    list, so it can be looked up per ZAI. Each line's fields are ``alias,
+    filename, type, ZA, isomeric_state, awr, temperature, binary_flag,
+    path`` (the same order :meth:`AssimilationSuite.to_ace_direct` writes
+    via its own ``create_xsdata`` option); the path field may be
+    double-quoted (e.g. when it contains spaces), so surrounding quotes
+    are stripped before resolving it.
 
     Parameters
     ----------
@@ -47,8 +52,8 @@ def _parse_xsdata(path: str) -> dict[int, str]:
         for line in xsdata_file:
             words = line.split()
             if len(words) >= 9:
-                za = int(float(words[2]))
-                lib = (xsdata.parent / words[8]).resolve()
+                za = int(float(words[3]))
+                lib = (xsdata.parent / words[8].strip('"')).resolve()
                 if za not in libraries:
                     libraries[za] = str(lib)
     return libraries
@@ -743,13 +748,19 @@ class AssimilationSuite:
         create_xsdata: bool = False,
     ) -> list[str]:
         """
-        Export cross-section (and nu-bar) adjustments directly onto existing ACE files.
+        Export cross-section, nu-bar, and chi adjustments directly onto existing ACE files.
 
         Unlike `to_ace`, which reprocesses each isotope from ENDF via SANDY/NJOY
         (a matter of minutes per isotope), this method edits an already-processed
-        ACE file's XSS array directly via `andalus.ace.ACE.perturb`/`perturb_nu`,
-        which takes a fraction of a second per isotope. It requires a source ASCII
-        ACE file per ZAI being adjusted; it does not talk to ENDF or run NJOY.
+        ACE file's XSS array directly via `andalus.ace.ACE.perturb`/`perturb_nu`/
+        `perturb_chi`, which takes a fraction of a second per isotope. It requires
+        a source ASCII ACE file per ZAI being adjusted; it does not talk to ENDF
+        or run NJOY.
+
+        MTs are routed by ANDALUS's own numbering convention: 452/456 go to
+        `perturb_nu`, MT >= 35000 (ANDALUS's MF*1000+MT chi encoding, e.g.
+        35018 for prompt fission chi) go to `perturb_chi`, and everything else
+        goes to `perturb`.
 
         Source ACE files can be located either by directory convention
         (`ace_dir`) or, for libraries that don't follow that naming convention
@@ -809,6 +820,7 @@ class AssimilationSuite:
             already-processed ACE file to perturb directly.
         andalus.ace.ACE.perturb : Applies pointwise cross-section adjustments.
         andalus.ace.ACE.perturb_nu : Applies nu-bar adjustments.
+        andalus.ace.ACE.perturb_chi : Applies fission-spectrum adjustments.
         """
         if self.xs_adjustment is None:
             raise ValueError(
@@ -857,14 +869,19 @@ class AssimilationSuite:
             ace = ACE.read(in_path)
             delta = xs_adjustment.loc[zai]
 
-            nu_mask = delta.index.get_level_values("MT").isin(NU_MTS)
-            xs_delta = delta[~nu_mask]
+            mt_levels = delta.index.get_level_values("MT")
+            nu_mask = mt_levels.isin(NU_MTS)
+            chi_mask = mt_levels >= CHI_MF
+            xs_delta = delta[~nu_mask & ~chi_mask]
             nu_delta = delta[nu_mask]
+            chi_delta = delta[chi_mask]
 
             if not xs_delta.empty:
                 ace.perturb(xs_delta)
             if not nu_delta.empty:
                 ace.perturb_nu(nu_delta)
+            if not chi_delta.empty:
+                ace.perturb_chi(chi_delta)
 
             out_path = os.path.join(out_dir, filename)
             ace.write(out_path)

@@ -6,6 +6,8 @@ U-238 ACE files aren't checked in, so those tests are skipped if the files
 aren't present locally.
 """
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -268,16 +270,85 @@ class TestPerturb:
         with pytest.raises(ValueError, match="no known constituent"):
             ace.perturb(adjustment)
 
-    def test_unmapped_aggregate_mt_raises_keyerror(self):
-        # MT=1/3/27/101 are never parsed as Reaction entries, so they fail the
-        # "not in self.reactions" check before the aggregate-redistribution logic runs.
+    def test_unmapped_aggregate_mt_raises_valueerror(self):
+        # MT=1/3/27/101 are aggregate MTs with no entry in AGGREGATE_MEMBERS
+        # (nothing to redistribute onto), regardless of whether they're
+        # themselves present as a Reaction entry.
         ace = ACE.read(H1_PATH)
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples([(101, 1.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
         )
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="no known constituent"):
             ace.perturb(adjustment)
+
+    def test_aggregate_mt4_absent_still_redistributes_to_constituents(self):
+        # Some ACE files carry MT=51..91 without a separate MT=4 aggregate
+        # array (e.g. U-234). The adjustment should still reach the
+        # constituents even though there's nothing to resync afterward.
+        ace = ACE.read(U235_PATH)
+        del ace.reactions[4]
+        levels = [mt for mt in range(51, 92) if mt in ace.reactions]
+        originals = {mt: ace.reactions[mt].xs.copy() for mt in levels}
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        with pytest.warns(UserWarning, match="no aggregate array to resync"):
+            ace.perturb(adjustment)
+
+        for mt in levels:
+            np.testing.assert_allclose(ace.reactions[mt].xs, originals[mt] * 1.1, rtol=1e-10)
+        assert 4 not in ace.reactions
+
+    def test_mt18_absent_redistributes_to_multichance_fission_constituents(self):
+        # No checked-in fixture has multi-chance fission data (MT=19/20/21/38
+        # without a separate MT=18), e.g. U-234, so this simulates that shape
+        # on top of U-235's real MT=18 table.
+        from andalus.ace.reader import Reaction
+
+        ace = ACE.read(U235_PATH)
+        fission = ace.reactions.pop(18)
+        ace.reactions[19] = Reaction(mt=19, ie=fission.ie, xs=fission.xs.copy(), energies=fission.energies)
+        ace.reactions[20] = Reaction(mt=20, ie=fission.ie, xs=fission.xs.copy() * 0.5, energies=fission.energies)
+        original_19 = ace.reactions[19].xs.copy()
+        original_20 = ace.reactions[20].xs.copy()
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(18, 0.0, float(fission.energies[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        with pytest.warns(UserWarning, match="no aggregate array to resync"):
+            ace.perturb(adjustment)
+
+        np.testing.assert_allclose(ace.reactions[19].xs, original_19 * 1.1, rtol=1e-10)
+        np.testing.assert_allclose(ace.reactions[20].xs, original_20 * 1.1, rtol=1e-10)
+        assert 18 not in ace.reactions
+
+    def test_mt18_present_is_perturbed_directly_not_as_aggregate(self):
+        ace = ACE.read(U235_PATH)
+        fission = ace.reactions[18]
+        original = fission.xs.copy()
+
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples(
+                [(18, 0.0, float(fission.energies[-1]))],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            ace.perturb(adjustment)  # must not warn: MT=18 is present, perturbed as a leaf reaction
+
+        np.testing.assert_allclose(ace.reactions[18].xs, original * 1.1, rtol=1e-10)
 
 
 class TestChi:

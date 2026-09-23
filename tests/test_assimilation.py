@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from andalus.assimilation import AssimilationSuite
+from andalus.assimilation import AssimilationSuite, _parse_xsdata
 
 
 @pytest.fixture
@@ -371,6 +371,20 @@ def test_to_ace_no_posterior(assimilation_setup):
         _ = suite.to_ace(library="jeff_40")
 
 
+def test_parse_xsdata_maps_za_to_path(tmp_path):
+    """Fields are alias, filename, type, ZA, isomeric_state, awr, temperature,
+    binary_flag, path (the format written by to_ace_direct's create_xsdata),
+    with the path optionally double-quoted."""
+    ace_path = tmp_path / "92234.03c"
+    ace_path.write_text("")
+    xsdata_path = tmp_path / "test.xsdata"
+    xsdata_path.write_text(f'  92234.03c 92234.03c 1 92234 0 234.0 300 0 "{ace_path}"\n')
+
+    libraries = _parse_xsdata(str(xsdata_path))
+
+    assert libraries == {92234: str(ace_path.resolve())}
+
+
 def test_to_ace_direct_no_posterior(assimilation_setup):
     """Test direct conversion to ACE format when no posterior has been calculated."""
     suite = assimilation_setup
@@ -425,3 +439,71 @@ def test_to_ace_direct_perturbs_and_writes(assimilation_setup, tmp_path):
     ratio = result.reactions[102].xs / source.reactions[102].xs
     np.testing.assert_allclose(ratio[in_bin], 1.2, rtol=1e-10)
     np.testing.assert_allclose(ratio[~in_bin], 1.0, rtol=1e-10)
+
+
+def test_to_ace_direct_with_xsdata_path(assimilation_setup, tmp_path):
+    """Regression test: to_ace_direct(xsdata_path=...) must locate the source
+    ACE file via the ZA field (not the always-"1" type field it used to read)."""
+    import shutil
+
+    from andalus.ace import ACE
+
+    suite = assimilation_setup
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    shutil.copy("data/1-H-1g-300.0", source_dir / "1001.03c")
+    out_dir = tmp_path / "out"
+
+    xsdata_path = tmp_path / "test.xsdata"
+    xsdata_path.write_text(f'  1001.03c 1001.03c 1 1001 0 1.0 300 0 "{source_dir / "1001.03c"}"\n')
+
+    zai = 10010
+    energy = ACE.read("data/1-H-1g-300.0").reactions[102].energies
+    e_lo, e_hi = float(energy[10]), float(energy[50])
+    suite.xs_adjustment = pd.Series(
+        [0.2],
+        index=pd.MultiIndex.from_tuples([(zai, 102, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]),
+    )
+
+    written = suite.to_ace_direct(out_dir=str(out_dir), xsdata_path=str(xsdata_path))
+
+    assert written == [str(out_dir / "1001.03c")]
+
+
+def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_path):
+    """MT=35018 (ANDALUS's MF*1000+MT convention for prompt fission chi) must be
+    routed to ACE.perturb_chi, not ACE.perturb (which has no MT=35018 reaction)."""
+    import shutil
+
+    from andalus.ace import ACE
+
+    suite = assimilation_setup
+
+    ace_dir = tmp_path / "ace"
+    ace_dir.mkdir()
+    out_dir = tmp_path / "out"
+
+    source = ACE.read("data/92235.03c")
+    dist = source.chi[18]
+    e_out = dist.tables[0].energy_out
+    e_lo, e_hi = float(e_out[len(e_out) // 4]), float(e_out[3 * len(e_out) // 4])
+    shutil.copy("data/92235.03c", ace_dir / "92235.03c")
+
+    zai = 922350
+    suite.xs_adjustment = pd.Series(
+        [0.2],
+        index=pd.MultiIndex.from_tuples([(zai, 35018, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]),
+    )
+
+    written = suite.to_ace_direct(ace_dir=str(ace_dir), out_dir=str(out_dir))
+
+    assert written == [str(out_dir / "92235.03c")]
+    result = ACE.read(written[0])
+
+    in_bin = (e_out > e_lo) & (e_out <= e_hi)
+    for source_table, result_table in zip(source.chi[18].tables, result.chi[18].tables, strict=True):
+        expected = source_table.pdf.copy()
+        expected[in_bin] *= 1.2
+        expected /= np.trapz(expected, e_out)
+        np.testing.assert_allclose(result_table.pdf, expected, rtol=1e-6)
