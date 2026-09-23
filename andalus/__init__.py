@@ -2,6 +2,7 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from . import ace
 from .application import Application, ApplicationSuite
 from .assimilation import AssimilationSuite
 from .benchmark import Benchmark, BenchmarkSuite
@@ -17,6 +18,7 @@ except PackageNotFoundError:
     __version__ = "unknown"
 
 __all__ = [
+    "ace",
     "Application",
     "ApplicationSuite",
     "AssimilationSuite",

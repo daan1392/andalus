@@ -5,16 +5,58 @@ for assimilation purposes.
 
 __all__ = ["AssimilationSuite"]
 
+import os
 from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
 
+from andalus.ace import ACE
+from andalus.ace.core import CHI_MF, NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
 from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
 from andalus.utils import sandwich
+
+
+def _parse_xsdata(path: str) -> dict[int, str]:
+    """Map ZA to source ACE file path from a Serpent xsdata file.
+
+    Adapted from `endf.ace.get_libraries_from_xsdata
+    <https://github.com/paulromano/endf-python/blob/main/src/endf/ace.py>`_
+    by Paul Romano, keyed by ZA (word[3]) instead of returning an ordered
+    list, so it can be looked up per ZAI. Each line's fields are ``alias,
+    filename, type, ZA, isomeric_state, awr, temperature, binary_flag,
+    path`` (the same order :meth:`AssimilationSuite.to_ace_direct` writes
+    via its own ``create_xsdata`` option); the path field may be
+    double-quoted (e.g. when it contains spaces), so surrounding quotes
+    are stripped before resolving it.
+
+    Parameters
+    ----------
+    path : str
+        Path to the Serpent xsdata file.
+
+    Returns
+    -------
+    dict[int, str]
+        Mapping of ZA (``ZAI // 10``) to the resolved absolute path of the
+        corresponding ACE file.
+    """
+    from pathlib import Path
+
+    xsdata = Path(path)
+    libraries = {}
+    with open(xsdata) as xsdata_file:
+        for line in xsdata_file:
+            words = line.split()
+            if len(words) >= 9:
+                za = int(float(words[3]))
+                lib = (xsdata.parent / words[8].strip('"')).resolve()
+                if za not in libraries:
+                    libraries[za] = str(lib)
+    return libraries
 
 
 @dataclass
@@ -695,6 +737,164 @@ class AssimilationSuite:
         if create_xsdata and xsdata_lines:
             with open("adjusted.xsdata", "a") as f:
                 f.write("\n".join(xsdata_lines) + "\n")
+
+    def to_ace_direct(
+        self,
+        out_dir: str,
+        ace_dir: str | None = None,
+        xsdata_path: str | None = None,
+        temperature: int = 300,
+        verbose: bool = False,
+        only_zais_applications: bool = False,
+        create_xsdata: bool = False,
+    ) -> list[str]:
+        """
+        Export cross-section, nu-bar, and chi adjustments directly onto existing ACE files.
+
+        Unlike `to_ace`, which reprocesses each isotope from ENDF via SANDY/NJOY
+        (a matter of minutes per isotope), this method edits an already-processed
+        ACE file's XSS array directly via `andalus.ace.ACE.perturb`/`perturb_nu`/
+        `perturb_chi`, which takes a fraction of a second per isotope. It requires
+        a source ASCII ACE file per ZAI being adjusted; it does not talk to ENDF
+        or run NJOY.
+
+        MTs are routed by ANDALUS's own numbering convention: 452/456 go to
+        `perturb_nu`, MT >= 35000 (ANDALUS's MF*1000+MT chi encoding, e.g.
+        35018 for prompt fission chi) go to `perturb_chi`, and everything else
+        goes to `perturb`.
+
+        Source ACE files can be located either by directory convention
+        (`ace_dir`) or, for libraries that don't follow that naming convention
+        (e.g. JEFF-4.0's ``1-H-1g-300.0``), via a Serpent-style xsdata directory
+        file (`xsdata_path`). Exactly one of the two must be given.
+
+        Parameters
+        ----------
+        out_dir : str
+            Directory to write perturbed ACE files to (created if it doesn't
+            exist). Written files are named ``{ZAID}.{temperature_code}c``
+            (e.g. ``92235.03c`` for U-235 at 300 K).
+        ace_dir : str, optional
+            Directory containing source ACE files, named
+            ``{ZAID}.{temperature_code}c`` — the same naming convention
+            `to_ace`'s xsdata output uses. Mutually exclusive with `xsdata_path`.
+        xsdata_path : str, optional
+            Path to a Serpent-style xsdata file mapping ZAIDs to source ACE
+            file paths (relative paths are resolved against the xsdata file's
+            directory), allowing source libraries with arbitrary file naming.
+            Mutually exclusive with `ace_dir`.
+        temperature : int, default 300
+            Temperature in Kelvin, used to build the ACE filename suffix
+            (e.g. 300 -> "03c").
+        verbose : bool, default False
+            If True, print progress for each ZAI.
+        only_zais_applications : bool, default False
+            If True, only process ZAIs present in the application suite.
+        create_xsdata : bool, default False
+            If True, writes a Serpent-style xsdata directory file
+            (``adjusted.xsdata`` in `out_dir`) listing the written ACE files.
+
+        Returns
+        -------
+        list[str]
+            Paths to the written ACE files, one per processed ZAI.
+
+        Raises
+        ------
+        ValueError
+            If `self.xs_adjustment` is None, indicating no posterior has
+            been calculated, or if `ace_dir`/`xsdata_path` are not given
+            exactly one at a time.
+        FileNotFoundError
+            If the source ACE file for a ZAI cannot be located.
+
+        Notes
+        -----
+        The xsdata parsing follows the format used by
+        `endf.ace.get_libraries_from_xsdata
+        <https://github.com/paulromano/endf-python/blob/main/src/endf/ace.py>`_
+        from Paul Romano's ``endf-python`` package.
+
+        See Also
+        --------
+        to_ace : The SANDY/NJOY-based equivalent, for isotopes without an
+            already-processed ACE file to perturb directly.
+        andalus.ace.ACE.perturb : Applies pointwise cross-section adjustments.
+        andalus.ace.ACE.perturb_nu : Applies nu-bar adjustments.
+        andalus.ace.ACE.perturb_chi : Applies fission-spectrum adjustments.
+        """
+        if self.xs_adjustment is None:
+            raise ValueError(
+                "No nuclear data adjustments found in the assimilation suite. Cannot export to ACE format."
+            )
+        if (ace_dir is None) == (xsdata_path is None):
+            raise ValueError("Exactly one of 'ace_dir' or 'xsdata_path' must be given.")
+        xs_adjustment = self.xs_adjustment
+
+        xsdata_map = _parse_xsdata(xsdata_path) if xsdata_path is not None else None
+
+        zais = list(xs_adjustment.index.get_level_values("ZAI").unique())
+        if only_zais_applications:
+            app_zais = set(self.applications.zais) if self.applications else set()
+            zais = [zai for zai in zais if zai in app_zais]
+            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
+        os.makedirs(out_dir, exist_ok=True)
+
+        def _xsdata_line(zai: int, path: str) -> str:
+            alias = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            return f"  {alias} {alias} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {path}"
+
+        written_paths = []
+        xsdata_lines = []
+        for zai in zais:
+            filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            if xsdata_map is not None:
+                in_path = xsdata_map.get(int(zai // 10))
+                if in_path is None or not os.path.exists(in_path):
+                    raise FileNotFoundError(
+                        f"No source ACE file found for ZAI={zai} in xsdata file '{xsdata_path}'. "
+                        "to_ace_direct requires an already-processed ACE file per ZAI."
+                    )
+            else:
+                assert ace_dir is not None
+                in_path = os.path.join(ace_dir, filename)
+                if not os.path.exists(in_path):
+                    raise FileNotFoundError(
+                        f"No source ACE file found for ZAI={zai} at '{in_path}'. "
+                        "to_ace_direct requires an already-processed ACE file per ZAI."
+                    )
+            if verbose:
+                print(f"Perturbing ZAI={zai} directly from {in_path}...")
+
+            ace = ACE.read(in_path)
+            delta = xs_adjustment.loc[zai]
+
+            mt_levels = delta.index.get_level_values("MT")
+            nu_mask = mt_levels.isin(NU_MTS)
+            chi_mask = mt_levels >= CHI_MF
+            xs_delta = delta[~nu_mask & ~chi_mask]
+            nu_delta = delta[nu_mask]
+            chi_delta = delta[chi_mask]
+
+            if not xs_delta.empty:
+                ace.perturb(xs_delta)
+            if not nu_delta.empty:
+                ace.perturb_nu(nu_delta)
+            if not chi_delta.empty:
+                ace.perturb_chi(chi_delta)
+
+            out_path = os.path.join(out_dir, filename)
+            ace.write(out_path)
+            written_paths.append(out_path)
+            if create_xsdata:
+                xsdata_lines.append(_xsdata_line(zai, filename))
+
+        if create_xsdata and xsdata_lines:
+            with open(os.path.join(out_dir, "adjusted.xsdata"), "a") as f:
+                f.write("\n".join(xsdata_lines) + "\n")
+
+        return written_paths
 
 
 if __name__ == "__main__":
