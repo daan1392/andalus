@@ -309,7 +309,8 @@ class ACE:
             rather than a :class:`TabulatedNu` (only tabulated nu-bar can
             be perturbed bin-wise).
         """
-        for mt, group in nu_adjustment.groupby(level="MT"):
+        for mt_raw, group in nu_adjustment.groupby(level="MT"):
+            mt = cast(int, mt_raw)
             if mt not in NU_MTS:
                 raise KeyError(f"MT={mt} is not a supported nu-bar MT. Supported: {sorted(NU_MTS)}")
             key = NU_MTS[mt]
