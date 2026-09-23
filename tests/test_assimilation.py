@@ -421,7 +421,8 @@ def test_to_ace_direct_perturbs_and_writes(assimilation_setup, tmp_path):
 
     source = ACE.read("data/1-H-1g-300.0")
     energy = source.reactions[102].energies
-    e_lo, e_hi = float(energy[10]), float(energy[50])
+    # ACE energies are in MeV; xs_adjustment bins are in eV (see andalus.ace.core._EV_PER_MEV).
+    e_lo, e_hi = float(energy[10]) * 1e6, float(energy[50]) * 1e6
     shutil.copy("data/1-H-1g-300.0", ace_dir / "1001.03c")
 
     zai = 10010  # ZAID 1001 (H-1), ground state
@@ -435,7 +436,7 @@ def test_to_ace_direct_perturbs_and_writes(assimilation_setup, tmp_path):
     assert written == [str(out_dir / "1001.03c")]
     result = ACE.read(written[0])
 
-    in_bin = (energy > e_lo) & (energy <= e_hi)
+    in_bin = (energy * 1e6 > e_lo) & (energy * 1e6 <= e_hi)
     ratio = result.reactions[102].xs / source.reactions[102].xs
     np.testing.assert_allclose(ratio[in_bin], 1.2, rtol=1e-10)
     np.testing.assert_allclose(ratio[~in_bin], 1.0, rtol=1e-10)
@@ -460,7 +461,7 @@ def test_to_ace_direct_with_xsdata_path(assimilation_setup, tmp_path):
 
     zai = 10010
     energy = ACE.read("data/1-H-1g-300.0").reactions[102].energies
-    e_lo, e_hi = float(energy[10]), float(energy[50])
+    e_lo, e_hi = float(energy[10]) * 1e6, float(energy[50]) * 1e6
     suite.xs_adjustment = pd.Series(
         [0.2],
         index=pd.MultiIndex.from_tuples([(zai, 102, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]),
@@ -487,7 +488,7 @@ def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_pat
     source = ACE.read("data/92235.03c")
     dist = source.chi[18]
     e_out = dist.tables[0].energy_out
-    e_lo, e_hi = float(e_out[len(e_out) // 4]), float(e_out[3 * len(e_out) // 4])
+    e_lo, e_hi = float(e_out[len(e_out) // 4]) * 1e6, float(e_out[3 * len(e_out) // 4]) * 1e6
     shutil.copy("data/92235.03c", ace_dir / "92235.03c")
 
     zai = 922350
@@ -501,7 +502,7 @@ def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_pat
     assert written == [str(out_dir / "92235.03c")]
     result = ACE.read(written[0])
 
-    in_bin = (e_out > e_lo) & (e_out <= e_hi)
+    in_bin = (e_out * 1e6 > e_lo) & (e_out * 1e6 <= e_hi)
     for source_table, result_table in zip(source.chi[18].tables, result.chi[18].tables, strict=True):
         expected = source_table.pdf.copy()
         expected[in_bin] *= 1.2

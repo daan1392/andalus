@@ -23,6 +23,11 @@ from andalus.ace.reader import EnergyDistribution, PolynomialNu, TabulatedNu, Un
 H1_PATH = "data/1-H-1g-300.0"
 U235_PATH = "data/92235.03c"
 
+# ACE energy arrays (Reaction.energies, nu-bar/chi energy grids, etc.) are in
+# MeV; every adjustment Series elsewhere in ANDALUS uses genuine eV. Multiply
+# by this when building adjustment bin edges directly from ACE-native energies.
+_EV_PER_MEV = 1.0e6
+
 
 def _assert_total_identity(ace: ACE, rtol: float = 1e-6) -> None:
     """total_xs == elastic + absorption + (fission + neutron-producing reactions).
@@ -124,7 +129,7 @@ class TestPerturb:
     def test_bin_edge_convention_and_uncovered_energies(self):
         ace = ACE.read(H1_PATH)
         energy = ace.reactions[102].energies
-        e_lo, e_hi = float(energy[10]), float(energy[50])
+        e_lo, e_hi = float(energy[10]) * _EV_PER_MEV, float(energy[50]) * _EV_PER_MEV
         original = ace.reactions[102].xs.copy()
 
         adjustment = pd.Series(
@@ -133,11 +138,11 @@ class TestPerturb:
         )
         ace.perturb(adjustment)
 
-        in_bin = (energy > e_lo) & (energy <= e_hi)
+        in_bin = (energy * _EV_PER_MEV > e_lo) & (energy * _EV_PER_MEV <= e_hi)
         np.testing.assert_allclose(ace.reactions[102].xs[in_bin], original[in_bin] * 1.1)
         np.testing.assert_allclose(ace.reactions[102].xs[~in_bin], original[~in_bin])
         # the lower edge itself belongs to the bin below, not this one
-        assert energy[10] == e_lo
+        assert energy[10] * _EV_PER_MEV == e_lo
         assert not in_bin[10]
 
     def test_unknown_mt_raises_keyerror(self):
@@ -164,7 +169,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.2],
             index=pd.MultiIndex.from_tuples(
-                [(102, float(energy[0]), float(energy[-1]))],
+                [(102, float(energy[0]) * _EV_PER_MEV, float(energy[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -177,7 +182,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.05],
             index=pd.MultiIndex.from_tuples(
-                [(18, float(energy[0]), float(energy[-1]))],
+                [(18, float(energy[0]) * _EV_PER_MEV, float(energy[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -191,7 +196,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.05],
             index=pd.MultiIndex.from_tuples(
-                [(18, float(energy[0]), float(energy[-1]))],
+                [(18, float(energy[0]) * _EV_PER_MEV, float(energy[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -206,7 +211,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                [(4, float(ace.energy_grid[0]) * _EV_PER_MEV, float(ace.energy_grid[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -220,7 +225,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                [(4, float(ace.energy_grid[0]) * _EV_PER_MEV, float(ace.energy_grid[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -244,7 +249,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                [(4, float(ace.energy_grid[0]) * _EV_PER_MEV, float(ace.energy_grid[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -263,7 +268,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                [(4, float(ace.energy_grid[0]) * _EV_PER_MEV, float(ace.energy_grid[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -294,7 +299,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(4, float(ace.energy_grid[0]), float(ace.energy_grid[-1]))],
+                [(4, float(ace.energy_grid[0]) * _EV_PER_MEV, float(ace.energy_grid[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -321,7 +326,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(18, 0.0, float(fission.energies[-1]))],
+                [(18, 0.0, float(fission.energies[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -340,7 +345,7 @@ class TestPerturb:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(18, 0.0, float(fission.energies[-1]))],
+                [(18, 0.0, float(fission.energies[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -383,7 +388,7 @@ class TestPerturbNu:
 
         adjustment = pd.Series(
             [0.1],
-            index=pd.MultiIndex.from_tuples([(452, 0.0, 2.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+            index=pd.MultiIndex.from_tuples([(452, 0.0, 2.0 * _EV_PER_MEV)], names=["MT", "E_min_eV", "E_max_eV"]),
         )
         ace.perturb_nu(adjustment)
 
@@ -392,7 +397,7 @@ class TestPerturbNu:
     def test_bin_edge_convention_and_uncovered_energies(self):
         ace = ACE.read(U235_PATH)
         table = ace.nu["total"]
-        e_lo, e_hi = float(table.energy[10]), float(table.energy[50])
+        e_lo, e_hi = float(table.energy[10]) * _EV_PER_MEV, float(table.energy[50]) * _EV_PER_MEV
         original = table.values.copy()
 
         adjustment = pd.Series(
@@ -401,7 +406,7 @@ class TestPerturbNu:
         )
         ace.perturb_nu(adjustment)
 
-        in_bin = (table.energy > e_lo) & (table.energy <= e_hi)
+        in_bin = (table.energy * _EV_PER_MEV > e_lo) & (table.energy * _EV_PER_MEV <= e_hi)
         np.testing.assert_allclose(table.values[in_bin], original[in_bin] * 1.1)
         np.testing.assert_allclose(table.values[~in_bin], original[~in_bin])
 
@@ -412,7 +417,7 @@ class TestPerturbNu:
         adjustment = pd.Series(
             [0.1],
             index=pd.MultiIndex.from_tuples(
-                [(452, float(table.energy[0]), float(table.energy[-1]))],
+                [(452, float(table.energy[0]) * _EV_PER_MEV, float(table.energy[-1]) * _EV_PER_MEV)],
                 names=["MT", "E_min_eV", "E_max_eV"],
             ),
         )
@@ -445,7 +450,8 @@ class TestPerturbChi:
         originals = [t.pdf.copy() for t in dist.tables]
 
         e_out = dist.tables[0].energy_out
-        e_out_lo, e_out_hi = float(e_out[len(e_out) // 4]), float(e_out[3 * len(e_out) // 4])
+        e_out_lo = float(e_out[len(e_out) // 4]) * _EV_PER_MEV
+        e_out_hi = float(e_out[3 * len(e_out) // 4]) * _EV_PER_MEV
 
         # MT=35018: ANDALUS's MF*1000+MT convention for prompt fission chi (MT=18).
         adjustment = pd.Series(
@@ -454,7 +460,7 @@ class TestPerturbChi:
         )
         ace.perturb_chi(adjustment)
 
-        in_bin = (e_out > e_out_lo) & (e_out <= e_out_hi)
+        in_bin = (e_out * _EV_PER_MEV > e_out_lo) & (e_out * _EV_PER_MEV <= e_out_hi)
         for table, original in zip(dist.tables, originals, strict=True):
             expected = original.copy()
             expected[in_bin] *= 1.2
@@ -467,7 +473,7 @@ class TestPerturbChi:
 
         adjustment = pd.Series(
             [0.5],
-            index=pd.MultiIndex.from_tuples([(35018, 0.0, 30.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+            index=pd.MultiIndex.from_tuples([(35018, 0.0, 30.0 * _EV_PER_MEV)], names=["MT", "E_min_eV", "E_max_eV"]),
         )
         ace.perturb_chi(adjustment)
 

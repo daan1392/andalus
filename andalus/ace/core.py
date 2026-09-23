@@ -79,6 +79,16 @@ NU_MTS = {452: "total", 456: "prompt"}
 CHI_MF = 35000
 
 
+#: ACE files store energies in MeV (the reader never converts this, so
+#: ``Reaction.energies``, nu-bar/chi energy grids, etc. are all MeV), while
+#: every adjustment ``pd.Series`` elsewhere in ANDALUS (``Sensitivity``,
+#: GLLS, ``AssimilationSuite.xs_adjustment``) is genuinely in eV — see
+#: ``andalus/sensitivity.py``'s ``sens.energies[i] * 1e6``. :func:`_apply_bin_adjustment`
+#: is the single place that bridges the two, so every ``perturb*`` method
+#: gets this conversion for free.
+_EV_PER_MEV = 1.0e6
+
+
 def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Series) -> np.ndarray:
     """Apply relative multigroup adjustments to a pointwise array in place.
 
@@ -92,10 +102,13 @@ def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Ser
         Pointwise values to perturb in place (e.g. ``Reaction.xs`` or a
         nu-bar table's ``values``).
     energies : np.ndarray
-        The energy grid ``values`` is aligned with.
+        The energy grid ``values`` is aligned with, in the ACE-native unit
+        (MeV).
     bins : pd.Series
-        Series indexed by ``(E_min_eV, E_max_eV)`` with relative
-        adjustments, applied via ``1 + adjustment``.
+        Series indexed by ``(E_min_eV, E_max_eV)`` (genuinely in eV, per
+        ANDALUS's convention elsewhere) with relative adjustments, applied
+        via ``1 + adjustment``. Converted to MeV internally before
+        comparison against ``energies``.
 
     Returns
     -------
@@ -105,7 +118,7 @@ def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Ser
     factor = np.ones(len(values))
     for edges, adjustment in bins.items():
         e_min, e_max = cast("tuple[float, float]", edges)
-        mask = (energies > e_min) & (energies <= e_max)
+        mask = (energies > e_min / _EV_PER_MEV) & (energies <= e_max / _EV_PER_MEV)
         factor[mask] *= 1.0 + adjustment
 
     delta = values * (factor - 1.0)
