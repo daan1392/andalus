@@ -16,7 +16,7 @@ from andalus.ace.core import (
     NEUTRON_PRODUCING_MTS,
     NON_XS_MTS,
 )
-from andalus.ace.reader import PolynomialNu, TabulatedNu
+from andalus.ace.reader import EnergyDistribution, PolynomialNu, TabulatedNu, UnsupportedEnergyLaw
 
 H1_PATH = "data/1-H-1g-300.0"
 U235_PATH = "data/92235.03c"
@@ -280,6 +280,30 @@ class TestPerturb:
             ace.perturb(adjustment)
 
 
+class TestChi:
+    def test_u235_mt18_parsed_as_law4(self):
+        ace = ACE.read(U235_PATH)
+        assert 18 in ace.chi
+        dist = ace.chi[18]
+        assert isinstance(dist, EnergyDistribution)
+        assert len(dist.energy_in) == len(dist.tables)
+
+    def test_non_fissile_has_no_law4_chi(self):
+        ace = ACE.read(H1_PATH)
+        assert all(not isinstance(dist, EnergyDistribution) for dist in ace.chi.values())
+
+    def test_all_incident_energy_tables_normalized_and_monotonic(self):
+        ace = ACE.read(U235_PATH)
+        dist = ace.chi[18]
+        for table in dist.tables:
+            integral = np.trapz(table.pdf, table.energy_out)
+            assert integral == pytest.approx(1.0, abs=1e-4)
+            assert table.cdf[0] == pytest.approx(0.0, abs=1e-6)
+            assert table.cdf[-1] == pytest.approx(1.0, abs=1e-6)
+            assert np.all(np.diff(table.cdf) >= -1e-12)
+            assert np.all((table.cdf >= 0) & (table.cdf <= 1.0 + 1e-9))
+
+
 class TestPerturbNu:
     def test_single_nu_table_accepts_mt452(self):
         ace = ACE.read(H1_PATH)
@@ -341,3 +365,62 @@ class TestPerturbNu:
         )
         with pytest.raises(KeyError):
             ace.perturb_nu(adjustment)
+
+
+class TestPerturbChi:
+    def test_all_incident_energy_tables_shifted_identically(self):
+        ace = ACE.read(U235_PATH)
+        dist = ace.chi[18]
+        originals = [t.pdf.copy() for t in dist.tables]
+
+        e_out = dist.tables[0].energy_out
+        e_out_lo, e_out_hi = float(e_out[len(e_out) // 4]), float(e_out[3 * len(e_out) // 4])
+
+        # MT=35018: ANDALUS's MF*1000+MT convention for prompt fission chi (MT=18).
+        adjustment = pd.Series(
+            [0.2],
+            index=pd.MultiIndex.from_tuples([(35018, e_out_lo, e_out_hi)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        ace.perturb_chi(adjustment)
+
+        in_bin = (e_out > e_out_lo) & (e_out <= e_out_hi)
+        for table, original in zip(dist.tables, originals, strict=True):
+            expected = original.copy()
+            expected[in_bin] *= 1.2
+            expected /= np.trapz(expected, e_out)  # perturb_chi renormalizes to unit area afterward
+            np.testing.assert_allclose(table.pdf, expected, rtol=1e-6)
+
+    def test_pdf_stays_normalized_and_cdf_monotonic(self):
+        ace = ACE.read(U235_PATH)
+        dist = ace.chi[18]
+
+        adjustment = pd.Series(
+            [0.5],
+            index=pd.MultiIndex.from_tuples([(35018, 0.0, 30.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        ace.perturb_chi(adjustment)
+
+        for table in dist.tables:
+            assert np.trapz(table.pdf, table.energy_out) == pytest.approx(1.0, abs=1e-6)
+            assert table.cdf[0] == pytest.approx(0.0, abs=1e-9)
+            assert table.cdf[-1] == pytest.approx(1.0, abs=1e-6)
+            assert np.all(np.diff(table.cdf) >= -1e-12)
+
+    def test_unknown_mt_raises_keyerror(self):
+        ace = ACE.read(U235_PATH)
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(35999, 0.0, 1.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(KeyError):
+            ace.perturb_chi(adjustment)
+
+    def test_non_law4_raises_not_implemented(self):
+        ace = ACE.read(H1_PATH)
+        mt = next(mt for mt, dist in ace.chi.items() if isinstance(dist, UnsupportedEnergyLaw))
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(35000 + mt, 0.0, 1.0)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(NotImplementedError):
+            ace.perturb_chi(adjustment)

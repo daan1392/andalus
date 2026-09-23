@@ -5,7 +5,7 @@ from typing import cast
 import numpy as np
 import pandas as pd
 
-from andalus.ace.reader import PolynomialNu, Reaction, TabulatedNu, read_ace
+from andalus.ace.reader import EnergyDistribution, PolynomialNu, Reaction, TabulatedNu, read_ace
 from andalus.ace.writer import write_ace
 
 #: Reactions whose cross-section is already the sum of other reactions
@@ -60,6 +60,13 @@ NON_XS_MTS = frozenset({203, 204, 205, 206, 207, 444})
 #: separate delayed-nu table.
 NU_MTS = {452: "total", 456: "prompt"}
 
+#: ANDALUS encodes chi (secondary-energy distribution) MTs as MF*1000+MT
+#: (e.g. 35018 for the MF=35 prompt fission neutron spectrum of MT=18),
+#: matching the convention already used for the ``reaction_dict``/``mf35``
+#: handling in :meth:`AssimilationSuite.to_ace`. :meth:`ACE.perturb_chi`
+#: subtracts this offset to find the underlying reaction MT in :attr:`ACE.chi`.
+CHI_MF = 35000
+
 
 def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Series) -> np.ndarray:
     """Apply relative multigroup adjustments to a pointwise array in place.
@@ -95,6 +102,17 @@ def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Ser
     return delta
 
 
+def _renormalize_and_rebuild_cdf(pdf: np.ndarray, energy_out: np.ndarray, cdf: np.ndarray) -> None:
+    """Renormalize ``pdf`` to unit area and rebuild ``cdf`` in place.
+
+    Both are updated in place via trapezoidal integration, matching the
+    ``CDF[0] = 0`` convention the reader observed in real ACE files.
+    """
+    pdf /= np.trapz(pdf, energy_out)
+    increments = np.diff(energy_out) * (pdf[:-1] + pdf[1:]) / 2.0
+    cdf[:] = np.concatenate(([0.0], np.cumsum(increments)))
+
+
 class ACE:
     """Represents an ACE file with methods to read, perturb, and write."""
 
@@ -119,6 +137,7 @@ class ACE:
         self.absorption_xs = self.data["absorption_xs"]
         self.reactions = self.data["reactions"]
         self.nu = self.data["nu"]
+        self.chi = self.data["chi"]
         self._raw_lines = self.data["raw_lines"]
 
     @classmethod
@@ -269,6 +288,59 @@ class ACE:
                 )
             assert isinstance(table, TabulatedNu)
             _apply_bin_adjustment(table.values, table.energy, group.droplevel("MT"))
+
+    def perturb_chi(self, chi_adjustment: pd.Series) -> None:
+        """Apply outgoing-energy-binned adjustments to a fission neutron spectrum.
+
+        Adjustment is a `pd.Series` with MultiIndex ``(MT, E_min_eV,
+        E_max_eV)``, the same shape as :meth:`perturb`/:meth:`perturb_nu`,
+        where MT follows ANDALUS's MF*1000+MT chi convention (e.g. 35018
+        for the prompt fission neutron spectrum of MT=18) and ``(E_min,
+        E_max]`` bins the *outgoing* energy. ANDALUS does not currently
+        produce chi sensitivities resolved by incident energy, so the
+        adjustment is applied identically to every incident-energy table
+        (future work, once incident-energy-resolved chi sensitivities
+        exist, could target a subset via an extended index).
+
+        The adjustment is applied to each table's PDF via the same bin
+        convention as :meth:`perturb`/:meth:`perturb_nu` (``1 +
+        adjustment`` over ``E_min < E_out <= E_max``), then the PDF is
+        renormalized to unit area and the CDF rebuilt by trapezoidal
+        integration.
+
+        Parameters
+        ----------
+        chi_adjustment : pd.Series
+            Series with MultiIndex (MT, E_min_eV, E_max_eV), MT following
+            the MF*1000+MT convention (e.g. 35018).
+
+        Raises
+        ------
+        KeyError
+            If the underlying reaction MT has no energy-distribution data
+            in this ACE file.
+        NotImplementedError
+            If the MT's energy distribution is not a single LAW=4
+            (Continuum Tabular Distribution) table.
+        """
+        for mt_key, group in chi_adjustment.groupby(level="MT"):
+            mt = cast("int", mt_key)
+            base_mt = mt - CHI_MF if mt >= CHI_MF else mt
+            if base_mt not in self.chi:
+                raise KeyError(
+                    f"MT={mt} (reaction MT={base_mt}) has no energy-distribution data for "
+                    f"ZAID={self.header.zaid}. Available MTs: {sorted(self.chi)}"
+                )
+            dist = self.chi[base_mt]
+            if not isinstance(dist, EnergyDistribution):
+                raise NotImplementedError(
+                    f"MT={mt} (reaction MT={base_mt}) energy distribution for ZAID={self.header.zaid} "
+                    f"is LAW={dist.law}; only LAW=4 (Continuum Tabular Distribution) can be perturbed."
+                )
+            bins = group.droplevel("MT")
+            for table in dist.tables:
+                _apply_bin_adjustment(table.pdf, table.energy_out, bins)
+                _renormalize_and_rebuild_cdf(table.pdf, table.energy_out, table.cdf)
 
     def _propagate_to_totals(self, rxn: Reaction, delta: np.ndarray) -> None:
         """Keep ``total_xs`` (and ``absorption_xs``) consistent after a perturbation.
