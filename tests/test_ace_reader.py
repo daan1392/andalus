@@ -1,12 +1,11 @@
 """Tests for the ACE reader and perturbation logic.
 
-Uses ``data/1-H-1g-300.0`` (non-fissile, checked into the repo) as the
-baseline fixture, and the fissile U-234/U-235/U-238 ACE files under
-``examples/drafts/`` (large, not checked in) for nu-bar / fission-family
-coverage. The fissile tests are skipped if those files aren't present.
+Uses ``data/1-H-1g-300.0`` (non-fissile) and ``data/92235.03c`` (fissile),
+both checked into the repo, for nu-bar / fission-family coverage. U-234 and
+U-238 ACE files aren't checked in, so those tests are skipped if the files
+aren't present locally.
 """
 
-import os
 
 import numpy as np
 import pandas as pd
@@ -21,13 +20,7 @@ from andalus.ace.core import (
 from andalus.ace.reader import PolynomialNu, TabulatedNu
 
 H1_PATH = "data/1-H-1g-300.0"
-U234_PATH = "examples/drafts/92234_0.03c"
-U235_PATH = "examples/drafts/92235_0.03c"
-U238_PATH = "examples/drafts/92238_0.03c"
-
-requires_u235 = pytest.mark.skipif(not os.path.exists(U235_PATH), reason=f"fissile fixture not available: {U235_PATH}")
-requires_u234 = pytest.mark.skipif(not os.path.exists(U234_PATH), reason=f"fissile fixture not available: {U234_PATH}")
-requires_u238 = pytest.mark.skipif(not os.path.exists(U238_PATH), reason=f"fissile fixture not available: {U238_PATH}")
+U235_PATH = "data/92235.03c"
 
 
 def _assert_total_identity(ace: ACE, rtol: float = 1e-6) -> None:
@@ -94,21 +87,11 @@ class TestPhysicalConsistency:
     def test_total_equals_elastic_plus_absorption_h1(self):
         _assert_total_identity(ACE.read(H1_PATH))
 
-    @requires_u234
-    def test_total_identity_u234(self):
-        _assert_total_identity(ACE.read(U234_PATH))
-
-    @requires_u235
     def test_total_identity_u235(self):
         _assert_total_identity(ACE.read(U235_PATH))
 
-    @requires_u238
-    def test_total_identity_u238(self):
-        _assert_total_identity(ACE.read(U238_PATH))
-
 
 class TestNuBar:
-    @requires_u235
     def test_u235_has_prompt_and_total_nu(self):
         ace = ACE.read(U235_PATH)
         assert ace.nu is not None
@@ -116,18 +99,12 @@ class TestNuBar:
         for table in ace.nu.values():
             assert isinstance(table, (PolynomialNu, TabulatedNu))
 
-    @requires_u234
-    def test_u234_nu_present(self):
-        ace = ACE.read(U234_PATH)
-        assert ace.nu is not None
-
     def test_non_fissile_has_no_nu(self):
         ace = ACE.read(H1_PATH)
         assert ace.nu is None
 
 
 class TestThresholdReactions:
-    @requires_u235
     def test_n2n_has_offset_and_shorter_grid(self):
         ace = ACE.read(U235_PATH)
         rxn = ace.reactions[16]  # (n,2n), threshold reaction
@@ -137,7 +114,6 @@ class TestThresholdReactions:
         assert len(energy) == len(rxn.xs)
         np.testing.assert_array_equal(energy, ace.energy_grid[rxn.ie - 1 : rxn.ie - 1 + len(rxn.xs)])
 
-    @requires_u235
     def test_fission_present(self):
         ace = ACE.read(U235_PATH)
         assert 18 in ace.reactions
@@ -194,7 +170,6 @@ class TestPerturb:
         ace.perturb(adjustment)
         _assert_total_identity(ace)
 
-    @requires_u235
     def test_total_and_absorption_stay_consistent_after_fission_perturbation(self):
         ace = ACE.read(U235_PATH)
         energy = ace.reactions[18].energies
@@ -208,7 +183,6 @@ class TestPerturb:
         ace.perturb(adjustment)
         _assert_total_identity(ace)
 
-    @requires_u235
     def test_fission_perturbation_does_not_change_absorption(self):
         ace = ACE.read(U235_PATH)
         absorption_before = ace.absorption_xs.copy()
@@ -223,7 +197,6 @@ class TestPerturb:
         ace.perturb(adjustment)
         np.testing.assert_allclose(ace.absorption_xs, absorption_before)
 
-    @requires_u235
     def test_aggregate_mt4_redistributes_to_constituents(self):
         ace = ACE.read(U235_PATH)
         levels = [mt for mt in range(51, 92) if mt in ace.reactions]
@@ -241,7 +214,6 @@ class TestPerturb:
         for mt in levels:
             np.testing.assert_allclose(ace.reactions[mt].xs, originals[mt] * 1.1, rtol=1e-10)
 
-    @requires_u235
     def test_aggregate_mt4_resynced_to_sum_of_constituents(self):
         ace = ACE.read(U235_PATH)
         adjustment = pd.Series(
@@ -266,7 +238,6 @@ class TestPerturb:
 
         np.testing.assert_allclose(aggregate.xs, expected, rtol=1e-10)
 
-    @requires_u235
     def test_aggregate_mt4_keeps_totals_consistent(self):
         ace = ACE.read(U235_PATH)
         adjustment = pd.Series(
@@ -279,7 +250,6 @@ class TestPerturb:
         ace.perturb(adjustment)
         _assert_total_identity(ace)
 
-    @requires_u235
     def test_aggregate_mt_with_no_present_constituents_raises(self):
         ace = ACE.read(U235_PATH)
         # Simulate a file where MT=4 is present but none of its MT=51..91
@@ -325,7 +295,6 @@ class TestPerturbNu:
 
         np.testing.assert_allclose(table.values, np.array([2.2, 3.3]))
 
-    @requires_u235
     def test_bin_edge_convention_and_uncovered_energies(self):
         ace = ACE.read(U235_PATH)
         table = ace.nu["total"]
@@ -342,7 +311,6 @@ class TestPerturbNu:
         np.testing.assert_allclose(table.values[in_bin], original[in_bin] * 1.1)
         np.testing.assert_allclose(table.values[~in_bin], original[~in_bin])
 
-    @requires_u235
     def test_perturbing_total_does_not_change_prompt(self):
         ace = ACE.read(U235_PATH)
         prompt_before = ace.nu["prompt"].values.copy()
@@ -357,7 +325,6 @@ class TestPerturbNu:
         ace.perturb_nu(adjustment)
         np.testing.assert_allclose(ace.nu["prompt"].values, prompt_before)
 
-    @requires_u235
     def test_unsupported_mt_raises_keyerror(self):
         ace = ACE.read(U235_PATH)
         adjustment = pd.Series(
