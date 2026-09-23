@@ -29,8 +29,8 @@ s = Sensitivity.from_serpent(
     sens0_path="data/hmi001_sens0.m",
     title="HMI-001",
     kind="keff",
-    zailist=[922350, 922380],   # optional subset of nuclides
-    pertlist=[18, 102],         # optional subset of reactions (MT numbers)
+    zailist=[922350, 922380],  # optional subset of nuclides
+    pertlist=[18, 102],  # optional subset of reactions (MT numbers)
 )
 ```
 
@@ -139,7 +139,7 @@ from andalus import Covariance
 cov = Covariance.from_errorr(
     files={"tape33": "data/u235.errorr"},
     zai=922350,
-    mts=[18, 102],     # fission and capture
+    mts=[18, 102],  # fission and capture
 )
 ```
 
@@ -153,7 +153,7 @@ cov2 = Covariance.from_hdf5("covariances.h5", zai=922350)
 ### Diagnostics
 
 ```python
-print(cov.correlation())           # correlation matrix
+print(cov.correlation())  # correlation matrix
 print(cov.is_unrealistic_uncertainty(threshold=10))  # True if any σ > 1000 %
 ```
 
@@ -177,10 +177,13 @@ cov_suite = CovarianceSuite.from_hdf5(
 
 # Build from individual Covariance objects
 from andalus import Covariance
-cov_suite = CovarianceSuite.from_dict({
-    922350: cov_u235,
-    922380: cov_u238,
-})
+
+cov_suite = CovarianceSuite.from_dict(
+    {
+        922350: cov_u235,
+        922380: cov_u238,
+    }
+)
 
 # Inspect uncertainties
 print(cov_suite.get_uncertainties())
@@ -219,11 +222,11 @@ suite = AssimilationSuite.from_yaml("assimilation.yaml")
 All suite classes expose combined properties as `pd.Series` or `pd.DataFrame`:
 
 ```python
-suite.m     # measured values (benchmarks only)
-suite.dm    # measurement uncertainties
-suite.c     # calculated values (benchmarks + applications)
-suite.dc    # calculation uncertainties
-suite.s     # sensitivity matrix (rows = cases, cols = nuclear data)
+suite.m  # measured values (benchmarks only)
+suite.dm  # measurement uncertainties
+suite.c  # calculated values (benchmarks + applications)
+suite.dc  # calculation uncertainties
+suite.s  # sensitivity matrix (rows = cases, cols = nuclear data)
 ```
 
 ### Running GLLS
@@ -263,7 +266,7 @@ print(posterior.xs_adjustment)
 The $c_k$ matrix quantifies how similar two cases are in terms of their nuclear data sensitivity:
 
 ```python
-ck = suite.ck_matrix()   # square DataFrame, rows and cols = all case titles
+ck = suite.ck_matrix()  # square DataFrame, rows and cols = all case titles
 print(ck)
 
 # Similarity of all cases with a specific application
@@ -276,7 +279,7 @@ Propagate the prior nuclear data uncertainty to the calculated response vector:
 
 ```python
 uncertainty = suite.propagate_nuclear_data_uncertainty()
-print(uncertainty)   # pd.Series, one value per case
+print(uncertainty)  # pd.Series, one value per case
 ```
 
 ### Exporting to ACE
@@ -317,7 +320,7 @@ Filter objects support boolean operators:
 ```python
 from andalus import Chi2Filter, Chi2NuclearDataFilter
 
-f_exp   = Chi2Filter(3.0)
+f_exp = Chi2Filter(3.0)
 f_ndata = Chi2NuclearDataFilter(3.0, suite.covariances.matrix)
 
 # Both conditions must hold
@@ -359,8 +362,8 @@ a = Application.from_hdf5("applications.h5", title="my-reactor")
 c = Covariance.from_hdf5("covariances.h5", zai=922350)
 
 # Load entire suites
-bs = BenchmarkSuite.from_hdf5("benchmarks.h5", titles=None)          # all
-bs = BenchmarkSuite.from_hdf5("benchmarks.h5", titles=["HMI-001"])   # subset
+bs = BenchmarkSuite.from_hdf5("benchmarks.h5", titles=None)  # all
+bs = BenchmarkSuite.from_hdf5("benchmarks.h5", titles=["HMI-001"])  # subset
 ```
 
 The HDF5 layout is:
@@ -399,6 +402,6 @@ Decompose the total uncertainty into contributions per energy bin or per reactio
 ```python
 from andalus.utils import sandwich_binwise, uncertainty_reactionwise
 
-bin_contributions  = sandwich_binwise(s, cov)
-rxn_contributions  = uncertainty_reactionwise(s, cov)
+bin_contributions = sandwich_binwise(s, cov)
+rxn_contributions = uncertainty_reactionwise(s, cov)
 ```

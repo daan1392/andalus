@@ -71,7 +71,7 @@ class TestApplicationInitialization:
         """Test that title must be a string."""
         with pytest.raises(TypeError, match="Title.*must be a string"):
             Application(
-                title=123,  # type: ignore[arg-type]
+                title=123,  # type: ignore
                 kind="keff",
                 c=1.0,
                 dc=0.1,
@@ -95,7 +95,7 @@ class TestApplicationInitialization:
             Application(
                 title="HMF001",
                 kind="keff",
-                c="not_a_number",  # type: ignore[arg-type]
+                c="not_a_number",  # type: ignore
                 dc=0.1,
                 s=test_sensitivity,
             )
@@ -107,7 +107,7 @@ class TestApplicationInitialization:
                 title="HMF001",
                 kind="keff",
                 c=1.0,
-                dc="not_a_number",  # type: ignore[arg-type]
+                dc="not_a_number",  # type: ignore
                 s=test_sensitivity,
             )
 
@@ -119,7 +119,7 @@ class TestApplicationInitialization:
                 kind="keff",
                 c=1.0,
                 dc=0.1,
-                s="not_a_sensitivity",  # type: ignore[arg-type]
+                s="not_a_sensitivity",  # type: ignore
             )
 
 
@@ -370,7 +370,7 @@ class TestApplicationFlux:
                 c=0.9989,
                 dc=0.00018,
                 s=test_sensitivity,
-                flux="not_a_spectrum",  # type: ignore[arg-type]
+                flux="not_a_spectrum",  # type: ignore
             )
 
     def test_hdf5_round_trip_with_flux(self, test_sensitivity):

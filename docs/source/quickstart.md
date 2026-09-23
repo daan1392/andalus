@@ -19,8 +19,8 @@ from andalus import Benchmark
 
 hmi = Benchmark.from_serpent(
     title="HMI-001",
-    m=1.0,          # measured k-eff
-    dm=0.0005,      # measurement uncertainty (1-sigma)
+    m=1.0,  # measured k-eff
+    dm=0.0005,  # measurement uncertainty (1-sigma)
     sens0_path="data/hmi001_sens0.m",
     results_path="data/hmi001_res.m",
     kind="keff",
@@ -52,8 +52,8 @@ suite = BenchmarkSuite.from_yaml("benchmarks.yaml")
 # Or build from a list
 suite = BenchmarkSuite.from_list([hmi, hmi2, hmi3])
 
-print(suite.m)   # measured values as pd.Series
-print(suite.c)   # calculated values as pd.Series
+print(suite.m)  # measured values as pd.Series
+print(suite.c)  # calculated values as pd.Series
 ```
 
 ## Step 3: Load covariances
@@ -96,7 +96,7 @@ posterior = suite.glls()
 
 posterior.summarize()
 print(f"Chi-squared: {posterior.chi_squared():.3f}")
-print(posterior.applications.c)   # adjusted calculated values
+print(posterior.applications.c)  # adjusted calculated values
 ```
 
 ## Step 6: Export to ACE (optional)

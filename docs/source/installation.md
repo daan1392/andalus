@@ -59,6 +59,7 @@ source .venv/bin/activate
 
 ```python
 import andalus
+
 print(andalus.__version__)
 ```
 

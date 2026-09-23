@@ -31,7 +31,7 @@ def real_cov():
 
 def test_covariance_from_errorr():
     """Test constructing a Covariance from NJOY errorr files."""
-    files = {
+    files: dict[str, str] = {
         "errorr31": os.path.join("data", "u235.errorr31"),
         "errorr33": os.path.join("data", "u235.errorr33"),
         "errorr34": os.path.join("data", "u235.errorr34"),
