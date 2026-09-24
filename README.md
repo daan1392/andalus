@@ -21,48 +21,33 @@ Applied Nuclear Data Assimilation using Least sqUareS (ANDALUS) is an Open Sourc
 
 * Perform sensitivity and uncertainty quantification using first order approximation.
 * Use the Generalized Linear Least Squares equation to infer multi-group nuclear data.
+* Create an adjusted ACE library.
 
 ## Documentation
 
-Documentation is built with [Sphynx](https://www.sphinx-doc.org) and deployed to GitHub Pages.
+Documentation can be found [here](https://daan1392.github.io/andalus/). Several example notebooks are available [here](https://daan1392.github.io/andalus/examples.html).
 
-* **Live site:** https://daan1392.github.io/andalus/
-* **Preview locally:** `just docs-serve` (serves at http://localhost:8000)
-* **Build:** `just docs-build`
+## Installation
+To install ANDALUS with pip:
+```sh
+pip install andalus
+```
 
-## Development
-
-To set up for local development:
-
+To install the latest version (recommended):
 ```bash
-# Clone your fork
-git clone git@github.com:your_name_here/andalus.git
+git clone git@github.com:daan1392/andalus.git
 cd andalus
-
-# Install in editable mode with live updates
-uv tool install --editable .
+pip install --editable .
 ```
 
-This installs the CLI globally but with live updates - any changes you make to the source code are immediately available when you run `andalus`.
-
-Run tests:
-
-```bash
-uv run pytest
-```
-
-Run quality checks (format, lint, type check, test):
-
-```bash
-just qa
-```
+## Acknowledgments
+ANDALUS was developed as part of the ongoing PhD thesis on *Robust data assimilation for LFR nuclear data improvement* in frame of a collaboration between [SCK CEN](https://www.sckcen.be) and [ULB](http://www.ulb.ac.be).
 
 ## Author
 
 ANDALUS was created in 2026 by Daan Houben.
 
 * Created by **[Daan Houben](https://github.com/daan1392)**
-  * PyPI: https://pypi.org/user/daan1392/
 * PyPI package: https://pypi.org/project/andalus/
 
 Built with [Cookiecutter](https://github.com/cookiecutter/cookiecutter) and the [audreyfeldroy/cookiecutter-pypackage](https://github.com/audreyfeldroy/cookiecutter-pypackage) project template.
