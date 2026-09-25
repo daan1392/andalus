@@ -127,7 +127,7 @@ app = Application.from_serpent(
 ## Covariance
 
 `Covariance` is a `pd.DataFrame` subclass that holds the multigroup cross-section covariance matrix
-for a single nuclide (ZAI).  The index is a MultiIndex `(MF, MT, E_min_eV, E_max_eV)`.
+for a single nuclide (ZAI).  The index is a MultiIndex `(MT, E_min_eV, E_max_eV)`.
 
 ### Loading from ERRORR files
 
@@ -163,7 +163,7 @@ print(cov.is_unrealistic_uncertainty(threshold=10))  # True if any σ > 1000 %
 
 `CovarianceSuite` wraps a block-diagonal covariance matrix that spans multiple nuclides and
 reactions.  Its `.matrix` attribute is the global `pd.DataFrame` with a five-level MultiIndex
-`(ZAI, MF, MT, E_min_eV, E_max_eV)`.
+`(ZAI, MT, E_min_eV, E_max_eV)`.
 
 ```python
 from andalus import CovarianceSuite
@@ -223,9 +223,9 @@ All suite classes expose combined properties as `pd.Series` or `pd.DataFrame`:
 
 ```python
 suite.m  # measured values (benchmarks only)
-suite.dm  # measurement uncertainties
+suite.dm  # measurement uncertainties (absolute)
 suite.c  # calculated values (benchmarks + applications)
-suite.dc  # calculation uncertainties
+suite.dc  # calculation uncertainties (absolute)
 suite.s  # sensitivity matrix (rows = cases, cols = nuclear data)
 ```
 
@@ -236,7 +236,7 @@ posterior = suite.glls()
 ```
 
 Pass `include_sensitivity_uncertainty=True` to account for the statistical uncertainty on the
-sensitivity profiles themselves:
+sensitivity profiles themselves (not yet tested):
 
 ```python
 posterior = suite.glls(include_sensitivity_uncertainty=True)
@@ -285,7 +285,26 @@ print(uncertainty)  # pd.Series, one value per case
 ### Exporting to ACE
 
 After running GLLS, export the adjusted nuclear data to ACE format for use in Serpent or other
-Monte Carlo codes (requires NJOY on `PATH`):
+Monte Carlo codes. Two methods are available; `to_ace_direct` is the recommended option.
+
+**`to_ace_direct`** edits an already-processed ACE file's `XSS` array directly (via
+`andalus.ace.ACE.perturb`/`perturb_nu`/`perturb_chi`), taking a fraction of a second per nuclide.
+It does not talk to ENDF or run NJOY, instead only an ASCII ACE file per adjusted ZAI is needed.
+Point it at either a directory of ACE files named by ZAID (`ace_dir`) or a Serpent-style xsdata
+file for libraries with non-standard naming, such as JEFF-4.0 (`xsdata_path`):
+
+```python
+posterior.to_ace_direct(
+    out_dir="adjusted_ace",
+    xsdata_path="path/to/jeff40.xsdata",
+    temperature=300,
+    create_xsdata=True,
+)
+```
+
+**`to_ace`** instead reprocesses each nuclide from its base ENDF6 file via SANDY/NJOY, which can
+take several minutes per nuclide, but only requires an ENDF6 library name/path rather than pre-built ACE
+files (requires NJOY on `PATH`):
 
 ```python
 posterior.to_ace(
@@ -296,8 +315,8 @@ posterior.to_ace(
 )
 ```
 
-Use `only_zais_applications=True` to limit the export to nuclides that actually appear in the
-application sensitivities.
+Both methods accept `only_zais_applications=True` to limit the export to nuclides that actually
+appear in the application sensitivities. If you do not possess of sensitivities while they are available in your application, but you did not calculate them. The calculated response and the predicted response using linear approximations could be different.
 
 ---
 

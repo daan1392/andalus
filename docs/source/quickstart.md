@@ -47,10 +47,10 @@ hmi = Benchmark.from_serpent(
 ```python
 from andalus import BenchmarkSuite
 
-suite = BenchmarkSuite.from_yaml("benchmarks.yaml")
+benchmark_suite = BenchmarkSuite.from_yaml("benchmarks.yaml")
 
 # Or build from a list
-suite = BenchmarkSuite.from_list([hmi, hmi2, hmi3])
+benchmark_suite = BenchmarkSuite.from_list([hmi, hmi2, hmi3])
 
 print(suite.m)  # measured values as pd.Series
 print(suite.c)  # calculated values as pd.Series
@@ -78,7 +78,7 @@ reactor = Application.from_serpent(
     results_path="data/reactor_res.m",
 )
 
-applications = ApplicationSuite.from_list([reactor])
+application_suite = ApplicationSuite.from_list([reactor])
 ```
 
 ## Step 5: Run GLLS and inspect results
@@ -88,7 +88,7 @@ from andalus import AssimilationSuite
 
 suite = AssimilationSuite(
     benchmarks=benchmark_suite,
-    applications=applications,
+    applications=application_suite,
     covariances=covariances,
 )
 
@@ -101,11 +101,12 @@ print(posterior.applications.c)  # adjusted calculated values
 
 ## Step 6: Export to ACE (optional)
 
-If NJOY is installed and you want to use the adjusted nuclear data in a Monte Carlo transport code:
+If you want to use the adjusted nuclear data in a Monte Carlo transport code:
 
 ```python
-posterior.to_ace(
-    library="jeff_40",
+posterior.to_ace_direct(
+    out_dir="adjusted_ace",
+    xsdata_path="path/to/jeff40.xsdata",
     temperature=300,
     create_xsdata=True,
 )

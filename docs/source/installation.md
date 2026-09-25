@@ -68,3 +68,5 @@ print(andalus.__version__)
 The `AssimilationSuite.to_ace()` method requires a working [NJOY](https://www.njoy21.io/) installation
 accessible on your `PATH`, in addition to the `sandy` Python package.  This is only needed when you
 want to export adjusted nuclear data to ACE format for use in a Monte Carlo transport code.
+
+`NJOY` is not required if the adjustment is instead applied directly to an existing ACE library. This approach is preferred, as it skips the processing step entirely. Consistency is strongest when the adjustments are applied to the same ACE library that was used to calculate the response of interest and the sensitivity coefficients. An added benefit is that we do not need to reprocess the ACE files, which saves a lot of time.
