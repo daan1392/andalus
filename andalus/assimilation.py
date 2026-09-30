@@ -536,7 +536,7 @@ class AssimilationSuite:
 
         # Build total benchmark covariance before inversion
         cov_exp_calc = pd.DataFrame(
-            np.diag((self.benchmarks.dm / self.benchmarks.m) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2),
+            np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2),
             index=cov_prior.index,
             columns=cov_prior.columns,
         )
@@ -553,7 +553,7 @@ class AssimilationSuite:
         )
 
         # Calculate difference between experimental and calculated values
-        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.c
 
         # Use the full prior covariance index rather than intersecting it down to the
         idx = self.covariances.matrix.index
@@ -612,14 +612,15 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        cov = np.diag((self.benchmarks.dm / self.benchmarks.m) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
+        # Calculate the covariance matrix
+        cov = np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
 
         if nuclear_data:
             cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
         cov_inv = np.diag(cov) ** -1
 
-        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.c
 
         chi2 = b**2 * cov_inv
 
@@ -637,14 +638,14 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        cov = np.diag((self.benchmarks.dm / self.benchmarks.m) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
+        cov = np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
 
         if nuclear_data:
             cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
 
         cov_inv = np.linalg.pinv(cov)
 
-        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.m
+        b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.c
 
         chi2 = b.T @ cov_inv @ b
 
