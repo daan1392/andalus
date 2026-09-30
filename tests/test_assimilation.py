@@ -508,3 +508,92 @@ def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_pat
         expected[in_bin] *= 1.2
         expected /= np.trapz(expected, e_out)
         np.testing.assert_allclose(result_table.pdf, expected, rtol=1e-6)
+
+
+def _flux_suite(fluxes, apps=()):
+    """Build an AssimilationSuite whose cases carry the given flux vectors.
+
+    ``fluxes`` maps benchmark titles to flux arrays and ``apps`` maps application
+    titles to flux arrays. All cases share the same energy grid.
+    """
+    from andalus.application import Application, ApplicationSuite
+    from andalus.benchmark import Benchmark, BenchmarkSuite
+    from andalus.sensitivity import Sensitivity
+    from andalus.spectrum import FluxSpectrum
+
+    def make_flux(title, values):
+        n = len(values)
+        edges = np.logspace(-2, 7, n + 1)
+        index = pd.MultiIndex.from_arrays([edges[:-1], edges[1:]], names=["E_min_eV", "E_max_eV"])
+        return FluxSpectrum(
+            pd.DataFrame({"flux": values, "flux_std": np.zeros(n)}, index=index),
+            title=title,
+        )
+
+    def make_sens(title):
+        index = pd.MultiIndex.from_tuples([(922350, 18, 1.0, 2.0)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"])
+        return Sensitivity(pd.DataFrame({title: [0.1], f"{title}_std": [0.01]}, index=index), title=title)
+
+    benchmarks = {
+        t: Benchmark(title=t, kind="keff", m=1.0, dm=0.002, c=1.0, dc=0.0002, s=make_sens(t), flux=make_flux(t, v))
+        for t, v in fluxes.items()
+    }
+    applications = {
+        t: Application(title=t, kind="keff", c=1.0, dc=0.0002, s=make_sens(t), flux=make_flux(t, v))
+        for t, v in dict(apps).items()
+    }
+    return AssimilationSuite(
+        benchmarks=BenchmarkSuite(benchmarks) if benchmarks else None,  # ty: ignore[invalid-argument-type]
+        applications=ApplicationSuite(applications) if applications else None,  # ty: ignore[invalid-argument-type]
+        covariances=None,  # ty: ignore[invalid-argument-type]
+    )
+
+
+class TestFluxSimMatrix:
+    def test_shape_and_labels(self):
+        suite = _flux_suite({"B1": [1.0, 2.0, 3.0], "B2": [3.0, 2.0, 1.0]}, apps={"A1": [1.0, 1.0, 1.0]})
+        sim = suite.flux_sim_matrix()
+
+        assert isinstance(sim, pd.DataFrame)
+        assert sim.shape == (3, 3)
+        assert list(sim.index) == list(sim.columns) == ["B1", "B2", "A1"]
+
+    def test_diagonal_is_one_and_symmetric(self):
+        suite = _flux_suite({"B1": [1.0, 2.0, 3.0], "B2": [3.0, 2.0, 1.0]}, apps={"A1": [0.5, 4.0, 1.0]})
+        sim = suite.flux_sim_matrix()
+
+        assert np.allclose(np.diag(sim), 1.0)
+        assert np.allclose(sim.values, sim.values.T)
+        assert sim.values.min() >= 0.0
+        assert sim.values.max() <= 1.0 + 1e-12
+
+    def test_known_cosine_values(self):
+        suite = _flux_suite({"B1": [1.0, 0.0], "B2": [0.0, 1.0], "B3": [1.0, 1.0]})
+        sim = suite.flux_sim_matrix()
+
+        assert sim.loc["B1", "B2"] == pytest.approx(0.0)
+        assert sim.loc["B1", "B3"] == pytest.approx(1 / np.sqrt(2))
+
+    def test_scale_invariant(self):
+        suite = _flux_suite({"B1": [1.0, 2.0, 3.0], "B2": [10.0, 20.0, 30.0]})
+        assert suite.flux_sim_matrix().loc["B1", "B2"] == pytest.approx(1.0)
+
+    def test_zero_flux_gives_nan(self):
+        suite = _flux_suite({"B1": [1.0, 2.0], "B2": [0.0, 0.0]})
+        sim = suite.flux_sim_matrix()
+
+        assert np.isnan(sim.loc["B2", "B1"])
+        assert np.isnan(sim.loc["B1", "B2"])
+        assert np.isnan(sim.loc["B2", "B2"])
+        assert sim.loc["B1", "B1"] == pytest.approx(1.0)
+
+    def test_benchmarks_only(self):
+        sim = _flux_suite({"B1": [1.0, 2.0], "B2": [2.0, 1.0]}).flux_sim_matrix()
+        assert sim.shape == (2, 2)
+        assert sim.loc["B1", "B2"] == pytest.approx(4.0 / 5.0)
+
+    def test_missing_flux_raises(self):
+        suite = _flux_suite({"B1": [1.0, 2.0]})
+        object.__setattr__(suite.benchmarks["B1"], "flux", None)
+        with pytest.raises(AssertionError, match="no flux spectrum"):
+            suite.flux_sim_matrix()

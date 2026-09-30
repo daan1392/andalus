@@ -257,6 +257,65 @@ class AssimilationSuite:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
 
     @property
+    def flux(self):
+        """
+        Concatenate flux data from all benchmarks and applications.
+
+        This property gathers flux vectors from available benchmark and
+        application suites, aligns them by their MultiIndex, and fills missing
+        values with zeros to create a unified sensitivity matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            A combined DataFrame containing flux vectors, aligned along the
+            columns (axis=1).
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        # Do not concatenate if there are only benchmarks or applications.
+        if self.benchmarks is None and self.applications:
+            return self.applications.flux
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.flux
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.flux, self.applications.flux], axis=1).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    @property
+    def dflux(self):
+        """
+        Concatenate flux vector uncertainties data from all benchmarks and applications.
+
+        This property gathers flux vector uncertainty vectors from available benchmark
+        and application suites, aligns them by their MultiIndex, and fills missing
+        values with zeros to create a unified sensitivity uncertainty matrix.
+
+        Returns
+        -------
+        pd.DataFrame
+            A combined DataFrame containing flux vector uncertainties, aligned
+            along the columns (axis=1).
+
+        Raises
+        ------
+        ValueError
+            If both `benchmarks` and `applications` are None or empty.
+        """
+        if self.benchmarks is None and self.applications:
+            return self.applications.dflux
+        elif self.applications is None and self.benchmarks:
+            return self.benchmarks.dflux
+        elif self.benchmarks and self.applications:
+            return pd.concat([self.benchmarks.dflux, self.applications.dflux], axis=1).fillna(0.0)
+        else:
+            raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+    @property
     def is_posterior(self) -> bool:
         """Check if the assimilation suite contains posterior data by checking if nd_adjustments is not None.
 
@@ -326,6 +385,31 @@ class AssimilationSuite:
         covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
+
+    def flux_sim_matrix(self) -> pd.DataFrame:
+        r"""Generate a similarity matrix based on the flux for the assimilation suite.
+
+        The flux similarity index measures the physical similarity between two flux
+        profiles:
+
+        .. math::
+
+            \phi_{ij} = \frac{\phi_i^T \phi_j}{\sqrt{\phi_i^T \phi_i \cdot \phi_j^T \phi_j}}
+
+        This is the cosine similarity of the flux vectors.
+
+        Returns
+        -------
+        pd.DataFrame
+            A DataFrame with shape ``(N, N)`` containing the flux similarity values
+            between every pair of benchmarks and applications in the suite.
+            Entries are ``NaN`` when either flux vector is all zeros.
+        """
+        flux = self.flux
+        gram = flux.T @ flux
+        norms = np.sqrt(np.diag(gram.values))
+        norms_safe = np.where(norms == 0.0, np.nan, norms)
+        return gram.div(norms_safe, axis=0).div(norms_safe, axis=1)
 
     def e_index_matrix(self) -> pd.DataFrame:
         r"""Generate an E-index similarity matrix for the assimilation suite.

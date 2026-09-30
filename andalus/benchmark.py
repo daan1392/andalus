@@ -15,6 +15,12 @@ from andalus.spectrum import FluxSpectrum
 from andalus.utils import read_serpent
 
 
+def _require_flux(benchmark: "Benchmark") -> FluxSpectrum:
+    if benchmark.flux is None:
+        raise AssertionError(f"Benchmark '{benchmark.title}' has no flux spectrum.")
+    return benchmark.flux
+
+
 @dataclass(frozen=True)
 class Benchmark:
     """
@@ -443,6 +449,44 @@ class BenchmarkSuite:
         return pd.concat([benchmark.s.iloc[:, 1].to_frame() for benchmark in self.benchmarks.values()], axis=1).fillna(
             0
         )
+
+    @property
+    def flux(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of flux objects in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of flux vectors in the suite.
+        """
+        if not self.benchmarks:
+            raise AssertionError("No benchmarks in the suite.")
+        return pd.concat(
+            [
+                _require_flux(benchmark).iloc[:, 0].rename(benchmark.title).to_frame()
+                for benchmark in self.benchmarks.values()
+            ],
+            axis=1,
+        ).fillna(0)
+
+    @property
+    def dflux(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of flux vector uncertainties in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of flux vector uncertainties in the suite.
+        """
+        if not self.benchmarks:
+            raise AssertionError("No benchmarks in the suite.")
+        return pd.concat(
+            [
+                _require_flux(benchmark).iloc[:, 1].rename(benchmark.title).to_frame()
+                for benchmark in self.benchmarks.values()
+            ],
+            axis=1,
+        ).fillna(0)
 
     @classmethod
     def from_list(cls, benchmarks: list[Benchmark]):

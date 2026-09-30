@@ -14,6 +14,12 @@ from andalus.spectrum import FluxSpectrum
 from andalus.utils import read_serpent
 
 
+def _require_flux(application: "Application") -> FluxSpectrum:
+    if application.flux is None:
+        raise AssertionError(f"Application '{application.title}' has no flux spectrum.")
+    return application.flux
+
+
 @dataclass(frozen=True)
 class Application:
     """
@@ -392,6 +398,44 @@ class ApplicationSuite:
             raise AssertionError("No applications in the suite.")
         return pd.concat(
             [application.s.iloc[:, 1].to_frame() for application in self.applications.values()], axis=1
+        ).fillna(0)
+
+    @property
+    def flux(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of flux objects in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of flux vectors in the suite.
+        """
+        if not self.applications:
+            raise AssertionError("No applications in the suite.")
+        return pd.concat(
+            [
+                _require_flux(application).iloc[:, 0].rename(application.title).to_frame()
+                for application in self.applications.values()
+            ],
+            axis=1,
+        ).fillna(0)
+
+    @property
+    def dflux(self) -> pd.DataFrame:
+        """Returns a pd.DataFrame of flux vector uncertainties in the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame of flux vector uncertainties in the suite.
+        """
+        if not self.applications:
+            raise AssertionError("No applications in the suite.")
+        return pd.concat(
+            [
+                _require_flux(application).iloc[:, 1].rename(application.title).to_frame()
+                for application in self.applications.values()
+            ],
+            axis=1,
         ).fillna(0)
 
     @property
