@@ -629,8 +629,6 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        # Marginal (diagonal) variances only: experimental correlations do not
-        # enter the per-benchmark chi-squared.
         cov = self._benchmark_covariance(nuclear_data)
 
         cov_inv = np.diag(cov.values) ** -1
