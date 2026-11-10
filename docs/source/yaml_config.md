@@ -142,7 +142,7 @@ covariances:
 
 `AssimilationSuite.from_yaml()` automatically determines which nuclides (ZAIs) to load from the
 union of all ZAIs present in the benchmark and application sensitivities.  The reactions loaded are
-currently fixed to MT 2, 4, 18, 102, 456, and 35018.
+currently fixed to MT 2, 4, 18, 102, 456, 34251, and 35018.
 
 ---
 

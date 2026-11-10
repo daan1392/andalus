@@ -390,13 +390,14 @@ class AssimilationSuite:
         if applications:
             zais_set.update(applications.zais)
         zais_list = sorted(list(zais_set))
-        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
+        mts = [2, 4, 18, 102, 456, 34251, 35018]
+        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=mts)
 
         xs = None
         with open(path) as f:
             xs_config = yaml.safe_load(f).get("cross_sections")
         if xs_config:
-            xs = CrossSectionMG.from_hdf5(xs_config["file_path"], zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
+            xs = CrossSectionMG.from_hdf5(xs_config["file_path"], zais=zais_list, mts=mts)
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances, xs=xs)
 

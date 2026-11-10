@@ -399,7 +399,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", required=True, help="HDF5 library to create or extend")
     parser.add_argument("--sections", nargs="+", default=list(DEFAULT_SECTIONS), choices=SECTIONS)
     parser.add_argument("--quantities", nargs="+", default=list(QUANTITIES), choices=QUANTITIES)
-    parser.add_argument("--mts", nargs="+", type=int, help="keep only these MT numbers (e.g. 2 18 102 456 35018)")
+    parser.add_argument(
+        "--mts", nargs="+", type=int, help="keep only these MT numbers (e.g. 2 18 102 456 34251 35018)"
+    )
     parser.add_argument("--temperature", type=float, default=300.0, help="temperature in K")
     parser.add_argument("--err", type=float, default=0.01, help="NJOY reconstruction tolerance (fractional)")
     parser.add_argument("--energy-grid", default="ECCO33", help="name in sandy.energy_grids")
