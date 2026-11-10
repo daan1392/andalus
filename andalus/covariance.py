@@ -106,7 +106,9 @@ class Covariance(pd.DataFrame):
             A DataFrame containing the covariance data with a
             (MT, E_min_eV, E_max_eV) MultiIndex.
         """
-        cov = errorr.get_cov().data
+        # The chi covariance (errorr35) is stored as a lower triangle, which SANDY's symmetry check
+        # rejects. It is symmetrized below, so the check is only skipped for this section.
+        cov = errorr.get_cov(covariance_checks=key != "errorr35").data
 
         def transform_index(idx: pd.MultiIndex) -> pd.MultiIndex:
             """Helper to transform the index levels and names."""
@@ -337,6 +339,7 @@ class Covariance(pd.DataFrame):
             attrs.is_multiindex = True
             attrs.zai = self.zai
             attrs.temperature = getattr(self, "temperature", None)
+            attrs.err = getattr(self, "err", None)
 
     def correlation(self) -> pd.DataFrame:
         """

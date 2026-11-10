@@ -164,3 +164,39 @@ def test_covariance_suite_from_dict():
     assert isinstance(suite, CovarianceSuite)
     assert suite.matrix.shape[0] == 2
     assert "ZAI" in suite.matrix.index.names
+
+
+class _FakeCov:
+    def __init__(self, data):
+        self.data = data
+
+
+class _FakeErrorr:
+    """Errorr stand-in returning a covariance that only holds its lower triangle."""
+
+    def __init__(self):
+        e = pd.IntervalIndex.from_breaks([1.0, 2.0, 3.0])
+        idx = pd.MultiIndex.from_product([[9549], [18], e], names=["MAT", "MT", "E"])
+        self.data = pd.DataFrame(np.array([[1.0, 0.0], [0.5, 2.0]]), index=idx, columns=idx)
+        self.checks = None
+
+    def get_cov(self, covariance_checks=True):
+        self.checks = covariance_checks
+        if covariance_checks and not np.allclose(self.data.values, self.data.values.T):
+            raise TypeError("Covariance matrix must be symmetric within numerical tolerance.")
+        return _FakeCov(self.data)
+
+
+def test_errorr35_lower_triangle_is_symmetrized():
+    errorr = _FakeErrorr()
+    cov = Covariance._errorr_to_df("errorr35", errorr)
+    assert errorr.checks is False
+    np.testing.assert_allclose(cov.values, [[1.0, 0.5], [0.5, 2.0]])
+    assert list(cov.index.get_level_values("MT")) == [35018, 35018]
+
+
+def test_other_sections_keep_sandy_symmetry_check():
+    errorr = _FakeErrorr()
+    with pytest.raises(TypeError, match="symmetric"):
+        Covariance._errorr_to_df("errorr33", errorr)
+    assert errorr.checks is True

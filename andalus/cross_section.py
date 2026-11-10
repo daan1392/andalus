@@ -189,7 +189,7 @@ class CrossSectionMG(pd.DataFrame):
         obj.temperature = temperature
         return obj
 
-    def to_hdf5(self, file_path: str):
+    def to_hdf5(self, file_path: str, merge: bool = False):
         """
         Append the data to an HDF5 file, one table per ZAI under ``zai_{ZAI}/xs/data``.
 
@@ -200,11 +200,21 @@ class CrossSectionMG(pd.DataFrame):
         ----------
         file_path : str
             Path to the HDF5 file.
+        merge : bool, default False
+            What to do when a ZAI is already stored. If False, its table is
+            replaced. If True, the stored table is kept and only the MT numbers
+            present in this object are replaced or added (for example to add
+            chi, MT 35018, to a library). The stored column name is kept.
         """
         with pd.HDFStore(file_path, mode="a") as store:
             for zai in self.zais:
                 key = f"zai_{zai}/xs/data"
                 df = pd.DataFrame(self.xs(zai, level="ZAI"))
+                if merge and key in store:
+                    old = store[key]
+                    df.columns = old.columns
+                    keep = old[~old.index.get_level_values("MT").isin(df.index.get_level_values("MT"))]
+                    df = pd.concat([keep, df]).sort_index()
                 store.put(key, df, format="table", complevel=9, complib="blosc")
                 store.get_storer(key).attrs.temperature = getattr(self, "temperature", None)
 
