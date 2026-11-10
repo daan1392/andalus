@@ -157,8 +157,9 @@ cross_sections:
 ```
 
 Sensitivities are relative, so library differences must be relative to the library the
-sensitivities were computed with: `suite.delta_response(reference_xs)` evaluates
-`S^T (xs - xs_ref) / xs_ref`.
+sensitivities were computed with: `suite.delta_response(other_xs)` evaluates
+`S^T (xs_other - xs) / xs`, with `suite.prior_xs` as the reference. After `glls()`, `suite.xs` is the
+posterior, `suite.prior_xs` the prior and `suite.xs_adjustment` the relative adjustment between them.
 
 ---
 

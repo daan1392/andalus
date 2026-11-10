@@ -11,7 +11,7 @@ from .cross_section import CrossSectionMG
 from .filters import Chi2Filter, Chi2NuclearDataFilter
 from .sensitivity import Sensitivity
 from .spectrum import FluxSpectrum
-from .utils import sandwich
+from .utils import delta_response, sandwich
 
 try:
     __version__ = version("andalus")
@@ -31,6 +31,7 @@ __all__ = [
     "FluxSpectrum",
     "Sensitivity",
     "sandwich",
+    "delta_response",
     "Chi2Filter",
     "Chi2NuclearDataFilter",
     "__version__",

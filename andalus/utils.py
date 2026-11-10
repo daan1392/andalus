@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import serpentTools
 
+from andalus.cross_section import CrossSectionMG
+
 
 def read_serpent(path):
     """Read a Serpent file while suppressing a known upstream NumPy deprecation warning."""
@@ -121,3 +123,52 @@ def uncertainty_reactionwise(s1, cov, s2=None):
     sorted_uncertainties = uncertainties.sort_values(ascending=False, key=abs)
 
     return sorted_uncertainties
+
+
+def delta_response(xs_ref, s, xs_other, by=None):
+    r"""
+    First-order relative change of responses when replacing ``xs_ref`` by ``xs_other``.
+
+    .. math::
+        \frac{\Delta R}{R} = \sum_i S_i \, \frac{\sigma^{other}_i - \sigma^{ref}_i}{\sigma^{ref}_i}
+
+    Sensitivities are relative, so the cross section difference is divided by the
+    reference library, which must be the one used to compute ``s``. Bins with a
+    zero reference cross section and sensitivity bins without cross section data
+    contribute zero.
+
+    Parameters
+    ----------
+    xs_ref : CrossSectionMG
+        Reference multigroup data, the library ``s`` was generated with.
+    s : pd.DataFrame
+        Sensitivities with index ``(ZAI, MT, E_min_eV, E_max_eV)``, one column per case.
+    xs_other : CrossSectionMG
+        Multigroup data to switch to.
+    by : {None, "reaction"}, default None
+        If ``"reaction"``, return the contributions summed per ``(ZAI, MT)``.
+
+    Returns
+    -------
+    pd.Series or pd.DataFrame
+        Relative response change per case, or a DataFrame indexed by ``(ZAI, MT)``
+        with one column per case when ``by="reaction"``.
+
+    Raises
+    ------
+    ValueError
+        If ``by`` is invalid, or if the sensitivity and cross section bins do not overlap.
+    """
+    if by not in (None, "reaction"):
+        raise ValueError("`by` must be None or 'reaction'.")
+    rel = CrossSectionMG(pd.DataFrame(xs_other)).relative_difference(xs_ref)
+    s = pd.DataFrame(s)
+    if s.index.intersection(rel.index).empty:
+        raise ValueError(
+            "No sensitivity bins match the cross section bins. Check that the ERRORR energy "
+            "grid equals the sensitivity energy grid."
+        )
+    contrib = s.reindex(rel.index, fill_value=0.0).mul(rel, axis=0)
+    if by == "reaction":
+        return contrib.groupby(level=["ZAI", "MT"]).sum()
+    return contrib.sum(axis=0).rename("delta_response")

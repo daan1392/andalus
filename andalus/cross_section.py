@@ -38,7 +38,7 @@ class CrossSectionMG(pd.DataFrame):
     Sensitivity coefficients are *relative*, :math:`S = (dk/k)/(d\\sigma/\\sigma)`.
     Differences between two libraries must therefore be expressed relative to
     the library the sensitivities were computed with, see
-    :meth:`relative_difference` and :meth:`delta_response`.
+    :meth:`relative_difference` and :func:`andalus.utils.delta_response`.
     """
 
     _metadata = ["temperature"]
@@ -208,6 +208,32 @@ class CrossSectionMG(pd.DataFrame):
                 store.get_storer(key).attrs.temperature = getattr(self, "temperature", None)
 
     # ------------------------------------------------------------ operations
+    def adjusted(self, adjustment: pd.Series, label: str = "posterior") -> "CrossSectionMG":
+        r"""
+        Apply a relative adjustment, e.g. the output of GLLS.
+
+        .. math::
+            \sigma^{post}_i = \sigma_i \, (1 + \delta_i)
+
+        Bins without an entry in ``adjustment`` are left unchanged.
+
+        Parameters
+        ----------
+        adjustment : pd.Series
+            Relative adjustment :math:`\delta_i` with index ``(ZAI, MT, E_min_eV, E_max_eV)``.
+        label : str, default "posterior"
+            Column name of the returned object.
+
+        Returns
+        -------
+        CrossSectionMG
+            The adjusted multigroup data.
+        """
+        factor = (1.0 + pd.Series(adjustment)).reindex(self.index).fillna(1.0)
+        out = CrossSectionMG((self._as_series() * factor).rename(label).to_frame())
+        out.temperature = getattr(self, "temperature", None)
+        return out
+
     def _as_series(self) -> pd.Series:
         if self.shape[1] != 1:
             raise ValueError("CrossSectionMG must have exactly one column (one library) for this operation.")
@@ -252,45 +278,3 @@ class CrossSectionMG(pd.DataFrame):
         a, b = a.loc[idx], b.loc[idx]
         rel = (a - b) / b.where(b != 0)
         return rel.fillna(0.0).rename("relative_difference")
-
-    def delta_response(self, s: pd.DataFrame, other, by: str | None = None) -> pd.Series | pd.DataFrame:
-        r"""
-        First-order relative change of responses when switching from ``other`` to ``self``.
-
-        .. math::
-            \frac{\Delta R}{R} = \sum_i S_i \, \frac{\sigma_i - \sigma^{ref}_i}{\sigma^{ref}_i}
-
-        Sensitivities are relative, so the cross section difference is divided
-        by the reference ``other`` (see :meth:`relative_difference`). Sensitivity
-        bins without cross section data contribute zero.
-
-        Parameters
-        ----------
-        s : pd.DataFrame
-            Sensitivities with index ``(ZAI, MT, E_min_eV, E_max_eV)``, one
-            column per case (e.g. ``AssimilationSuite.s``).
-        other : CrossSectionMG or pd.Series
-            Reference library, the one used to compute ``s``.
-        by : {None, "reaction"}, default None
-            If ``"reaction"``, return the contributions summed per ``(ZAI, MT)``
-            instead of the total.
-
-        Returns
-        -------
-        pd.Series or pd.DataFrame
-            Relative response change per case (Series), or a DataFrame indexed
-            by ``(ZAI, MT)`` with one column per case when ``by="reaction"``.
-        """
-        if by not in (None, "reaction"):
-            raise ValueError("`by` must be None or 'reaction'.")
-        rel = self.relative_difference(other)
-        s = pd.DataFrame(s)
-        if s.index.intersection(rel.index).empty:
-            raise ValueError(
-                "No sensitivity bins match the cross section bins. Check that the ERRORR energy "
-                "grid equals the sensitivity energy grid."
-            )
-        contrib = s.reindex(rel.index, fill_value=0.0).mul(rel, axis=0)
-        if by == "reaction":
-            return contrib.groupby(level=["ZAI", "MT"]).sum()
-        return contrib.sum(axis=0).rename("delta_response")
