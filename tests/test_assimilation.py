@@ -27,7 +27,10 @@ def test_s_property_concatenation(assimilation_setup):
 
     assert "HMF001" in combined_s.columns
     assert "HMF002-002" in combined_s.columns
-    assert combined_s.shape == (594, 3)
+    # 3 nuclides x 7 reactions (MT 2, 4, 18, 102, 456, 34251, 35018) x 33 energy groups
+    assert combined_s.shape == (693, 3)
+    assert set(combined_s.index.get_level_values("MT")) == {2, 4, 18, 102, 456, 34251, 35018}
+    assert combined_s.index.droplevel(["ZAI", "MT"]).nunique() == 33
 
 
 def test_ck_matrix(assimilation_setup):

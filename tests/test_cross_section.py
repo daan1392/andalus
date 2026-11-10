@@ -189,12 +189,19 @@ def test_suite_delta_response_with_real_sensitivities(xs):
     suite = AssimilationSuite.from_yaml("data/config.yaml")
     suite.xs = suite.prior_xs = xs
     scaled = CrossSectionMG(xs * 1.01)
-    out = suite.delta_response(xs)  # identical -> zero
+    # The cross sections hold U-235 only, so the sensitivities of the other nuclides are reported as uncovered
+    with pytest.warns(UserWarning, match="no cross section data") as record:
+        out = suite.delta_response(xs)  # identical -> zero
+        dk = suite.delta_response(scaled)
+        expected = delta_response(xs, suite.s, scaled)
     np.testing.assert_allclose(out, 0.0)
-    dk = suite.delta_response(scaled)
-    np.testing.assert_allclose(dk, delta_response(xs, suite.s, scaled))
+    np.testing.assert_allclose(dk, expected)
     sens = suite.s.reindex(xs.index, fill_value=0.0).sum(axis=0)
     np.testing.assert_allclose(dk, 0.01 * sens, rtol=1e-10)
+    # U-235 is fully covered, including its Legendre moment (MT 34251)
+    message = str(record[0].message)
+    assert "ZAI 922380" in message
+    assert "ZAI 922350" not in message
 
 
 def test_suite_without_xs_raises():
