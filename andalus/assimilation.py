@@ -16,6 +16,7 @@ from andalus.ace.core import CHI_MF, NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
+from andalus.cross_section import CrossSectionMG
 from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
 from andalus.utils import sandwich
 
@@ -71,6 +72,7 @@ class AssimilationSuite:
     covariances: CovarianceSuite
     xs_adjustment: pd.Series | None = None
     prior_c: pd.Series | None = None
+    xs: CrossSectionMG | None = None
 
     def __post_init__(self):
         if self.benchmarks is not None or self.applications is not None:
@@ -371,6 +373,8 @@ class AssimilationSuite:
         AssimilationSuite
             An instance of AssimilationSuite populated with data from the YAML file.
         """
+        import yaml
+
         # Load benchmark and application data from the YAML file
         benchmarks = BenchmarkSuite.from_yaml(path)
         applications = ApplicationSuite.from_yaml(path)
@@ -384,7 +388,39 @@ class AssimilationSuite:
         zais_list = sorted(list(zais_set))
         covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
 
-        return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
+        xs = None
+        with open(path) as f:
+            xs_config = yaml.safe_load(f).get("cross_sections")
+        if xs_config:
+            xs = CrossSectionMG.from_hdf5(xs_config["file_path"], zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
+
+        return cls(benchmarks=benchmarks, applications=applications, covariances=covariances, xs=xs)
+
+    def delta_response(self, other_xs, by: str | None = None) -> pd.Series | pd.DataFrame:
+        r"""Relative first-order change of every case's response (e.g. keff) when
+        the multigroup nuclear data in ``self.xs`` replaces ``other_xs``.
+
+        .. math::
+            \frac{\Delta R}{R} = S^T \frac{\sigma - \sigma^{ref}}{\sigma^{ref}}
+
+        The sensitivities are relative, so the difference is normalised to
+        ``other_xs``, which must be the library the sensitivities were computed with.
+
+        Parameters
+        ----------
+        other_xs : CrossSectionMG
+            Reference multigroup data.
+        by : {None, "reaction"}, default None
+            Return the contribution per ``(ZAI, MT)`` instead of the total.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            See :meth:`CrossSectionMG.delta_response`.
+        """
+        if self.xs is None:
+            raise ValueError("No multigroup cross sections (`xs`) in the assimilation suite.")
+        return self.xs.delta_response(self.s, other_xs, by=by)
 
     def flux_sim_matrix(self) -> pd.DataFrame:
         r"""Generate a similarity matrix based on the flux for the assimilation suite.
@@ -492,6 +528,7 @@ class AssimilationSuite:
             covariances=self.covariances,
             xs_adjustment=self.xs_adjustment,
             prior_c=self.prior_c,
+            xs=self.xs,
         )
 
     def _benchmark_covariance(self, nuclear_data: bool = True) -> pd.DataFrame:
@@ -605,6 +642,7 @@ class AssimilationSuite:
             covariances=CovarianceSuite.from_df(Vx_post),
             xs_adjustment=dx,
             prior_c=self.prior_c,
+            xs=self.xs,
         )
 
         print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")

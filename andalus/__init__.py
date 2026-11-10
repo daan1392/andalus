@@ -7,6 +7,7 @@ from .application import Application, ApplicationSuite
 from .assimilation import AssimilationSuite
 from .benchmark import Benchmark, BenchmarkSuite
 from .covariance import Covariance, CovarianceSuite
+from .cross_section import CrossSectionMG
 from .filters import Chi2Filter, Chi2NuclearDataFilter
 from .sensitivity import Sensitivity
 from .spectrum import FluxSpectrum
@@ -26,6 +27,7 @@ __all__ = [
     "BenchmarkSuite",
     "Covariance",
     "CovarianceSuite",
+    "CrossSectionMG",
     "FluxSpectrum",
     "Sensitivity",
     "sandwich",

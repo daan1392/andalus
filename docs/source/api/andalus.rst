@@ -47,7 +47,15 @@ andalus.constants module
 andalus.covariance module
 -------------------------
 
-.. automodule:: andalus.covariance
+.. automodule:: andalus.cross_section module
+----------------------------
+
+.. automodule:: andalus.cross_section
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+andalus.covariance
    :members:
    :undoc-members:
    :show-inheritance:

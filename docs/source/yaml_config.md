@@ -146,6 +146,22 @@ currently fixed to MT 2, 4, 18, 102, 456, and 35018.
 
 ---
 
+## `cross_sections` section (optional)
+
+Points to an HDF5 file with multigroup cross sections (produced via `CrossSectionMG.to_hdf5()`,
+which can be the same file as the covariances). They are available as `suite.xs`.
+
+```yaml
+cross_sections:
+  file_path: data/covariances.h5
+```
+
+Sensitivities are relative, so library differences must be relative to the library the
+sensitivities were computed with: `suite.delta_response(reference_xs)` evaluates
+`S^T (xs - xs_ref) / xs_ref`.
+
+---
+
 ## Full annotated example
 
 ```yaml
