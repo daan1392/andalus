@@ -84,6 +84,27 @@ class TestDeltaResponse:
         np.testing.assert_allclose(out.loc[(922350, 2), "case"], 0.2)
         np.testing.assert_allclose(out.loc[(922350, 18), "case"], 0.0)
 
+    def test_warns_about_uncovered_sensitivity_bins(self):
+        ref = _make([1.0, 2.0, 10.0, 20.0])
+        extra = pd.MultiIndex.from_tuples(
+            [(922350, 35018, 1e-5, 1.0), (922350, 35018, 1.0, 2e7), (922380, 18, 1e-5, 1.0)],
+            names=ref.index.names,
+        )
+        s = pd.DataFrame({"case": [0.1] * 4}, index=ref.index)
+        s = pd.concat([s, pd.DataFrame({"case": [0.5, -0.9, 0.0]}, index=extra)])
+        with pytest.warns(
+            UserWarning, match=r"2 sensitivity bins.*ZAI 922350 MT 35018 \(2 bins, max \|S\| = 0.9\)"
+        ) as rec:
+            delta_response(ref, s, ref)
+        # the zero-sensitivity uncovered bin (ZAI 922380) is not reported
+        assert "922380" not in str(rec[0].message)
+
+    def test_no_warning_when_fully_covered(self, recwarn):
+        ref = _make([1.0, 2.0, 10.0, 20.0])
+        s = pd.DataFrame({"case": [0.1] * 4}, index=ref.index)
+        delta_response(ref, s, ref)
+        assert not [w for w in recwarn if issubclass(w.category, UserWarning)]
+
     def test_invalid_by(self):
         ref = _make([1.0] * 4)
         with pytest.raises(ValueError):

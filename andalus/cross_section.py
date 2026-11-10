@@ -26,7 +26,8 @@ class CrossSectionMG(pd.DataFrame):
 
     The frame has a single column, named after the library the data comes
     from (e.g. ``"jeff40"``). Values are in the natural units of each MT:
-    barns for cross sections, dimensionless for nubar, 1/eV for chi.
+    barns for cross sections, dimensionless for nubar, and group fractions
+    (summing to 1) for chi.
 
     Attributes
     ----------

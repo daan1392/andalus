@@ -125,6 +125,32 @@ def uncertainty_reactionwise(s1, cov, s2=None):
     return sorted_uncertainties
 
 
+def _warn_uncovered(s, covered, max_listed=10):
+    """Warn about bins of ``s`` with a non-zero sensitivity that are not in ``covered``."""
+    uncovered = s.loc[s.index.difference(covered)]
+    uncovered = uncovered[(uncovered != 0).any(axis=1)]
+    if uncovered.empty:
+        return
+    summary = (
+        uncovered.abs()
+        .max(axis=1)
+        .groupby(level=["ZAI", "MT"])
+        .agg(["size", "max"])
+        .sort_values("max", ascending=False)
+    )
+    listed = ", ".join(
+        f"ZAI {zai} MT {mt} ({int(row['size'])} bins, max |S| = {row['max']:.3g})"
+        for (zai, mt), row in summary.head(max_listed).iterrows()
+    )
+    extra = f" and {len(summary) - max_listed} more" if len(summary) > max_listed else ""
+    warnings.warn(
+        f"{len(uncovered)} sensitivity bins with non-zero sensitivity have no cross section data "
+        f"and contribute zero to the response change: {listed}{extra}.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 def delta_response(xs_ref, s, xs_other, by=None):
     r"""
     First-order relative change of responses when replacing ``xs_ref`` by ``xs_other``.
@@ -158,6 +184,11 @@ def delta_response(xs_ref, s, xs_other, by=None):
     ------
     ValueError
         If ``by`` is invalid, or if the sensitivity and cross section bins do not overlap.
+
+    Warns
+    -----
+    UserWarning
+        If sensitivity bins with a non-zero value have no cross section data.
     """
     if by not in (None, "reaction"):
         raise ValueError("`by` must be None or 'reaction'.")
@@ -168,6 +199,7 @@ def delta_response(xs_ref, s, xs_other, by=None):
             "No sensitivity bins match the cross section bins. Check that the ERRORR energy "
             "grid equals the sensitivity energy grid."
         )
+    _warn_uncovered(s, rel.index)
     contrib = s.reindex(rel.index, fill_value=0.0).mul(rel, axis=0)
     if by == "reaction":
         return contrib.groupby(level=["ZAI", "MT"]).sum()
