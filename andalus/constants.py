@@ -60,10 +60,10 @@ MT_TRANSLATION = {
     "chi total": (35016),  # total fission neutron spectrum
     "chi delayed": (35017),  # delayed fission neutron spectrum
     "chi prompt": (35018),  # prompt fission neutron spectrum
-    "ela leg mom 1": (3401),  # elastic scattering Legendre moment 1
-    "ela leg mom 2": (3402),  # elastic scattering Legendre moment 2
-    "ela leg mom 3": (3403),  # elastic scattering Legendre moment 3
-    "ela leg mom 4": (3404),  # elastic scattering Legendre moment 4
+    "ela leg mom 1": (34251),  # elastic scattering Legendre moment 1
+    "ela leg mom 2": (34252),  # elastic scattering Legendre moment 2
+    "ela leg mom 3": (34253),  # elastic scattering Legendre moment 3
+    "ela leg mom 4": (34254),  # elastic scattering Legendre moment 4
 }
 
 PERT_LABELS = {

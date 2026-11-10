@@ -17,7 +17,9 @@ ERRORR sections and the MT numbers they hold:
 
 * ``errorr31``: nubar (MT 452, 455, 456)
 * ``errorr33``: cross sections (MT 1, 2, 4, 16, 18, 102, ...)
-* ``errorr34``: mubar (MT 251, offset to 34251)
+* ``errorr34``: first-order Legendre moment of the elastic angular distribution, i.e. mubar
+  (MT 251, offset to 34251). Add it to an existing library with ``--sections errorr34
+  --quantities xs covariances --merge-covariances``.
 * ``errorr35``: fission spectrum chi (MT 18, offset to 35018). Only available
   for evaluations with MF35 covariance data.
 
@@ -54,6 +56,9 @@ SECTIONS = ("errorr31", "errorr33", "errorr34", "errorr35")
 DEFAULT_SECTIONS = ("errorr31", "errorr33", "errorr35")  # angular distribution (errorr34) is opt-in
 QUANTITIES = ("xs", "covariances")
 
+# ENDF-6 files (MF) in which an ERRORR section finds its covariance; MF32 (resonance parameters)
+# is processed into the cross section covariance as well
+_MF_NEEDED = {"errorr31": {31}, "errorr33": {32, 33}, "errorr34": {34}, "errorr35": {35}}
 # ERRORR section -> keyword of ``sandy.Endf6.get_errorr`` that switches it on
 _SWITCH = {"errorr31": "nubar", "errorr33": "xs", "errorr34": "mubar", "errorr35": "chi"}
 # JEFF-4.0 ``n_92-U-235g.jeff``, JEFF-3.3 ``92-U-235g.jeff33`` (state letter g/m/n)
@@ -122,7 +127,9 @@ def process_endf6(
     """
     Run NJOY on one ENDF-6 file and store the ERRORR files.
 
-    Existing ERRORR files are reused (NJOY is skipped) unless ``overwrite`` is set.
+    Each section is processed separately: existing ERRORR files are reused unless ``overwrite``
+    is set, and sections that the evaluation has no data for (e.g. no MF34) are skipped. NJOY is
+    only run if at least one section is left.
 
     Parameters
     ----------
@@ -150,10 +157,15 @@ def process_endf6(
     stem = os.path.splitext(os.path.basename(endf6_path))[0]
     paths = {key: os.path.join(errorr_dir, f"{stem}.{key}") for key in sections}
 
-    if overwrite or not any(os.path.exists(p) for p in paths.values()):
-        ek = getattr(sandy.energy_grids, energy_grid)
-        switches = {_SWITCH[key]: (None if key in sections else False) for key in SECTIONS}
+    # Only sections without an ERRORR file are processed, unless overwrite is set.
+    todo = [key for key in sections if overwrite or not os.path.exists(paths[key])]
+    if todo:
         endf6 = sandy.Endf6.from_file(endf6_path)
+        mfs = set(endf6.get_records().MF.unique())
+        todo = [key for key in todo if mfs & _MF_NEEDED[key]]  # skip sections the evaluation does not have
+    if todo:
+        ek = getattr(sandy.energy_grids, energy_grid)
+        switches = {_SWITCH[key]: (None if key in todo else False) for key in SECTIONS}
         errorrs = endf6.get_errorr(
             temperature=temperature,
             err=err,
@@ -169,7 +181,7 @@ def process_endf6(
         )
         os.makedirs(errorr_dir, exist_ok=True)
         for key, errorr in errorrs.items():
-            if key in paths:
+            if key in todo:
                 errorr.to_file(paths[key])
 
     return {key: path for key, path in paths.items() if os.path.exists(path)}
@@ -230,6 +242,7 @@ def build_library(
     overwrite: bool = False,
     replace: bool = False,
     remove: list[int] | None = None,
+    merge_covariances: bool = False,
 ) -> dict[str, list[int]]:
     """
     Process ENDF-6 files and write the results to an HDF5 library.
@@ -247,7 +260,7 @@ def build_library(
     quantities : tuple of str
         ``"xs"`` for multigroup data, ``"covariances"`` for covariances. A stored
         covariance is replaced by one built from the selected ``sections`` only,
-        so select all sections you need when writing covariances. Multigroup
+        unless ``merge_covariances`` is set. Multigroup
         data is merged per MT, see ``CrossSectionMG.to_hdf5``.
     mts : list of int, optional
         Keep only these MT numbers (after offsetting, e.g. 35018).
@@ -271,6 +284,10 @@ def build_library(
     remove : list of int, optional
         ZAIs to delete from the output before anything is written, for example keys
         that were stored under a wrong ZAI.
+
+    merge_covariances : bool, default False
+        Merge new covariances into the stored ones, MT by MT, instead of replacing them, see
+        ``Covariance.to_hdf5``. Use it to add a section such as ``errorr34`` to a library.
 
     Returns
     -------
@@ -346,7 +363,7 @@ def build_library(
                 xs.to_hdf5(output, merge=True)
             if "covariances" in quantities:
                 cov = Covariance.from_errorr(files, zai, mts=mts, temperature=temperature, err=err)
-                cov.to_hdf5(output)
+                cov.to_hdf5(output, merge=merge_covariances)
         except Exception as exc:
             outcome["failed"].append(zai)
             log(f"ZAI {zai} FAILED while writing: {exc!r}")
@@ -391,6 +408,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=1, help="parallel NJOY runs")
     parser.add_argument("--overwrite", action="store_true", help="rerun NJOY even if ERRORR files exist")
     parser.add_argument("--replace", action="store_true", help="replace stored data of processed ZAIs, do not merge")
+    parser.add_argument(
+        "--merge-covariances", action="store_true", help="merge new covariances into stored ones, MT by MT"
+    )
     parser.add_argument("--remove-zais", nargs="+", type=int, help="delete these ZAIs from the output first")
     args = parser.parse_args(argv)
 
@@ -410,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
         overwrite=args.overwrite,
         replace=args.replace,
         remove=args.remove_zais,
+        merge_covariances=args.merge_covariances,
     )
     return 1 if outcome["failed"] else 0
 

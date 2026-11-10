@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from andalus import Covariance, CrossSectionMG
+from andalus.scripts import make_library as ml
 from andalus.scripts.make_library import build_library, main, remove_zais, zai_from_filename
 
 
@@ -160,3 +161,77 @@ def test_duplicate_zai_in_directory(tmp_path):
     (endf6 / "n-092_U_235.endf").write_text("")
     with pytest.raises(ValueError, match="same ZAI"):
         build_library(str(endf6), str(tmp_path / "errorr"), str(tmp_path / "lib.h5"))
+
+
+class _FakeErrorr:
+    def __init__(self, source):
+        self.source = source
+
+    def to_file(self, path):
+        shutil.copy(self.source, path)
+
+
+class _FakeEndf6:
+    """ENDF-6 stand-in that has the given MF numbers and records NJOY requests."""
+
+    calls: list = []
+    mfs = (33, 34)
+
+    @classmethod
+    def from_file(cls, path):
+        return cls()
+
+    def get_records(self):
+        return pd.DataFrame({"MF": list(self.mfs)})
+
+    def get_errorr(self, **kwargs):
+        type(self).calls.append(kwargs)
+        out = {}
+        for key, switch in (("errorr31", "nubar"), ("errorr33", "xs"), ("errorr34", "mubar"), ("errorr35", "chi")):
+            if kwargs[switch] is not False and int(key[-2:]) in self.mfs:
+                out[key] = _FakeErrorr(f"data/u235.{key}")
+        return out
+
+
+@pytest.fixture
+def fake_njoy(monkeypatch):
+    _FakeEndf6.calls = []
+    _FakeEndf6.mfs = (33, 34)
+    monkeypatch.setattr(ml.sandy, "Endf6", _FakeEndf6)
+    return _FakeEndf6
+
+
+def test_process_endf6_runs_only_missing_sections(workspace, fake_njoy):
+    endf6, errorr, _ = workspace
+    os.remove(f"{errorr}/n_92-U-235g.errorr34")
+    files = ml.process_endf6(f"{endf6}/n_92-U-235g.jeff", errorr, sections=("errorr33", "errorr34"))
+    assert set(files) == {"errorr33", "errorr34"}
+    assert len(fake_njoy.calls) == 1
+    call = fake_njoy.calls[0]
+    assert call["mubar"] is None and call["xs"] is False and call["nubar"] is False and call["chi"] is False
+
+
+def test_process_endf6_skips_njoy_when_all_sections_exist(workspace, fake_njoy):
+    endf6, errorr, _ = workspace
+    ml.process_endf6(f"{endf6}/n_92-U-235g.jeff", errorr, sections=("errorr33", "errorr34"))
+    assert fake_njoy.calls == []
+
+
+def test_process_endf6_skips_sections_missing_in_evaluation(workspace, fake_njoy):
+    endf6, errorr, _ = workspace
+    os.remove(f"{errorr}/n_92-U-235g.errorr34")
+    fake_njoy.mfs = (33,)  # no MF34
+    files = ml.process_endf6(f"{endf6}/n_92-U-235g.jeff", errorr, sections=("errorr34",))
+    assert files == {}
+    assert fake_njoy.calls == []
+
+
+def test_add_legendre_to_existing_library(workspace):
+    endf6, errorr, out = workspace
+    build_library(endf6, errorr, out, sections=("errorr33",), mts=[2, 18], label="lib", err=0.01)
+    build_library(endf6, errorr, out, sections=("errorr34",), merge_covariances=True, label="other", err=0.01)
+    xs = CrossSectionMG.from_hdf5(out)
+    assert set(xs.index.get_level_values("MT")) == {2, 18, 34251}
+    assert xs.label == "lib"
+    cov = Covariance.from_hdf5(out, zai=922350)
+    assert {2, 18, 34251} <= set(cov.index.get_level_values("MT"))

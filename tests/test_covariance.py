@@ -200,3 +200,45 @@ def test_other_sections_keep_sandy_symmetry_check():
     with pytest.raises(TypeError, match="symmetric"):
         Covariance._errorr_to_df("errorr33", errorr)
     assert errorr.checks is True
+
+
+class TestMergeToHdf5:
+    FILES33 = {"errorr33": "data/u235.errorr33"}
+    FILES34 = {"errorr34": "data/u235.errorr34"}
+
+    def test_merge_equals_building_from_both_sections(self, tmp_path):
+        path = str(tmp_path / "cov.h5")
+        Covariance.from_errorr(self.FILES33, zai=922350, temperature=300.0, err=0.01).to_hdf5(path)
+        Covariance.from_errorr(self.FILES34, zai=922350, temperature=300.0, err=0.01).to_hdf5(path, merge=True)
+
+        expected = Covariance.from_errorr({**self.FILES33, **self.FILES34}, zai=922350)
+        loaded = Covariance.from_hdf5(path, zai=922350)
+        assert loaded.shape == expected.shape
+        aligned = loaded.set_axis(expected.index, axis=0).set_axis(expected.columns, axis=1)
+        np.testing.assert_allclose(aligned.values, expected.values)
+        mt = loaded.index.get_level_values("MT")
+        assert 34251 in set(mt)
+        # zero correlation between the Legendre block and the rest
+        assert not loaded.values[np.ix_(mt == 34251, mt != 34251)].any()
+        assert loaded.err == 0.01
+
+    def test_merge_replaces_mts_present_in_new_object(self, tmp_path):
+        path = str(tmp_path / "cov.h5")
+        first = Covariance.from_errorr({**self.FILES33, **self.FILES34}, zai=922350)
+        first.to_hdf5(path)
+        again = Covariance.from_errorr(self.FILES34, zai=922350)
+        again.to_hdf5(path, merge=True)
+        loaded = Covariance.from_hdf5(path, zai=922350)
+        assert loaded.shape == first.shape
+        assert (loaded.index.get_level_values("MT") == 34251).sum() == 33
+
+    def test_merge_without_stored_covariance_just_writes(self, tmp_path):
+        path = str(tmp_path / "cov.h5")
+        Covariance.from_errorr(self.FILES34, zai=922350).to_hdf5(path, merge=True)
+        assert Covariance.from_hdf5(path, zai=922350).shape == (33, 33)
+
+    def test_without_merge_replaces(self, tmp_path):
+        path = str(tmp_path / "cov.h5")
+        Covariance.from_errorr(self.FILES33, zai=922350).to_hdf5(path)
+        Covariance.from_errorr(self.FILES34, zai=922350).to_hdf5(path)
+        assert Covariance.from_hdf5(path, zai=922350).shape == (33, 33)
