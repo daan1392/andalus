@@ -405,10 +405,10 @@ class TestBenchmarkSuiteInitialization:
         assert suite.dm["HMF001"] == pytest.approx(0.002)
         assert suite.dm["HMF002"] == pytest.approx(0.003)
 
-        # covariance matrix (diagonal relative (dm/m)^2, off-diagonal zero)
+        # covariance matrix (diagonal relative (dm/c)^2, off-diagonal zero)
         cov = suite.cov_m
         assert isinstance(cov, pd.DataFrame)
-        expected_diag = np.array([(0.002 / 1.0) ** 2, (0.003 / 2.0) ** 2])
+        expected_diag = np.array([(0.002 / test_benchmark.c) ** 2, (0.003 / 1.001) ** 2])
         assert np.allclose(np.diag(cov.values), expected_diag)
         assert np.allclose(cov.values - np.diag(np.diag(cov.values)), 0)
 
@@ -552,3 +552,80 @@ class TestBenchmarkFlux:
             title="HMF001",
         )
         assert b.flux is fake_flux
+
+
+class TestBenchmarkSuiteExperimentalCorrelation:
+    @pytest.fixture
+    def suite(self, test_benchmark):
+        b2 = Benchmark(
+            title="HMF002",
+            kind="keff",
+            m=2.0,
+            dm=0.003,
+            c=1.001,
+            dc=0.0002,
+            s=test_benchmark.s.rename_sensitivity("HMF002"),
+        )
+        return BenchmarkSuite(benchmarks={"HMF001": test_benchmark, "HMF002": b2}, exp_corr={("HMF001", "HMF002"): 0.5})
+
+    def test_cov_m_off_diagonal(self, suite):
+        cov = suite.cov_m
+        rel = suite.dm / suite.c
+        assert cov.loc["HMF001", "HMF002"] == pytest.approx(0.5 * rel["HMF001"] * rel["HMF002"])
+        assert cov.loc["HMF002", "HMF001"] == pytest.approx(cov.loc["HMF001", "HMF002"])
+        assert np.allclose(np.diag(cov.values), rel.values**2)
+
+    def test_reversed_pair_equivalent(self, suite):
+        reversed_suite = BenchmarkSuite(suite.benchmarks, exp_corr={("HMF002", "HMF001"): 0.5})
+        assert np.allclose(reversed_suite.cov_m.values, suite.cov_m.values)
+
+    def test_default_is_uncorrelated(self, suite):
+        plain = BenchmarkSuite(suite.benchmarks)
+        assert np.allclose(plain.corr_m.values, np.eye(2))
+
+    @pytest.mark.parametrize(
+        "corr, error",
+        [
+            ({("HMF001", "HMF001"): 1.0}, ValueError),
+            ({("HMF001", "NOPE"): 0.1}, KeyError),
+            ({("HMF001", "HMF002"): 1.5}, ValueError),
+            ({("HMF001", "HMF002"): 0.1, ("HMF002", "HMF001"): 0.1}, ValueError),
+            (["HMF001", "HMF002"], TypeError),
+        ],
+    )
+    def test_invalid_correlations(self, suite, corr, error):
+        with pytest.raises(error):
+            BenchmarkSuite(suite.benchmarks, exp_corr=corr)
+
+    def test_not_positive_semidefinite(self, suite, test_benchmark):
+        b3 = Benchmark(
+            title="HMF003",
+            kind="keff",
+            m=1.0,
+            dm=0.002,
+            c=1.0,
+            dc=0.0001,
+            s=test_benchmark.s.rename_sensitivity("HMF003"),
+        )
+        benchmarks = {**suite.benchmarks, "HMF003": b3}
+        corr = {("HMF001", "HMF002"): 0.9, ("HMF002", "HMF003"): 0.9, ("HMF001", "HMF003"): -0.9}
+        with pytest.raises(ValueError, match="positive semi-definite"):
+            BenchmarkSuite(benchmarks, exp_corr=corr)
+
+    def test_remove_and_filter_drop_pairs(self, suite):
+        filtered = suite.filter(lambda bm: bm.title == "HMF001")
+        assert filtered.exp_corr == {}
+        suite.remove("HMF002")
+        assert suite.exp_corr == {}
+
+    def test_update_c_keeps_correlation(self, suite):
+        updated = suite.update_c(suite.c)
+        assert updated.exp_corr == suite.exp_corr
+
+    def test_from_yaml(self, tmp_path):
+        config = tmp_path / "config.yaml"
+        config.write_text(
+            "benchmarks: []\nexperimental_correlations:\n  - {benchmarks: [a, b], rho: 0.3}\n",
+        )
+        with pytest.raises(KeyError):  # no benchmarks loaded, so the titles are unknown
+            BenchmarkSuite.from_yaml(str(config))

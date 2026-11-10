@@ -269,14 +269,63 @@ class BenchmarkSuite:
     ----------
     benchmarks : dict[str, Benchmark]
         A dictionary of benchmark objects, indexed by their title.
+    exp_corr : dict[tuple[str, str], float]
+        Experimental correlation coefficients between pairs of benchmarks,
+        keyed by ``(title_1, title_2)``. Pairs not listed are uncorrelated.
+        ``(a, b)`` and ``(b, a)`` are equivalent and may not both be given.
     """
 
     benchmarks: dict[str, Benchmark] = field(default_factory=dict)
+    exp_corr: dict[tuple[str, str], float] = field(default_factory=dict)
 
     def __post_init__(self):
         for benchmark in self.benchmarks.values():
             if not isinstance(benchmark, Benchmark):
                 raise TypeError(f"Benchmark {benchmark.title} is not a Benchmark object")
+        self._validate_exp_corr()
+
+    def _validate_exp_corr(self):
+        if not isinstance(self.exp_corr, dict):
+            raise TypeError("exp_corr must be a dict keyed by (title, title) tuples")
+        seen = set()
+        for pair, rho in self.exp_corr.items():
+            if not isinstance(pair, tuple) or len(pair) != 2:
+                raise TypeError(f"Correlation key {pair!r} must be a (title, title) tuple")
+            a, b = pair
+            if a == b:
+                raise ValueError(f"Correlation of benchmark {a!r} with itself is fixed to 1")
+            for title in pair:
+                if title not in self.benchmarks:
+                    raise KeyError(f"Correlation refers to unknown benchmark {title!r}")
+            if frozenset(pair) in seen:
+                raise ValueError(f"Correlation for pair {pair!r} is given more than once")
+            seen.add(frozenset(pair))
+            if not isinstance(rho, (int, float)) or not -1.0 <= rho <= 1.0:
+                raise ValueError(f"Correlation {rho!r} for pair {pair!r} must be a number in [-1, 1]")
+        if self.exp_corr and np.linalg.eigvalsh(self.corr_m.values).min() < -1e-10:
+            raise ValueError("Experimental correlation matrix is not positive semi-definite")
+
+    @property
+    def corr_m(self) -> pd.DataFrame:
+        """Returns the experimental correlation matrix of the suite.
+
+        Returns
+        -------
+        pd.DataFrame
+            Symmetric matrix with a unit diagonal, indexed by benchmark title.
+            Pairs without an entry in ``exp_corr`` are zero.
+        """
+        titles = list(self.benchmarks)
+        corr = pd.DataFrame(np.eye(len(titles)), index=titles, columns=titles)
+        for (a, b), rho in self.exp_corr.items():
+            corr.loc[a, b] = rho
+            corr.loc[b, a] = rho
+        return corr
+
+    def _corr_for(self, titles) -> dict[tuple[str, str], float]:
+        """Return the correlations whose two benchmarks are both in ``titles``."""
+        titles = set(titles)
+        return {pair: rho for pair, rho in self.exp_corr.items() if set(pair) <= titles}
 
     def __getitem__(self, key):
         return self.benchmarks[key]
@@ -381,6 +430,9 @@ class BenchmarkSuite:
     def cov_m(self) -> pd.DataFrame:
         """Returns a pd.DataFrame of benchmark relative measurement covariance in the suite.
 
+        Uncertainties are relative to the calculated value, ``dm / c``, and the
+        off-diagonal terms follow from the experimental correlations in ``exp_corr``.
+
         Returns
         -------
         pd.DataFrame
@@ -388,8 +440,9 @@ class BenchmarkSuite:
         """
         if not self.benchmarks:
             raise AssertionError("No benchmarks in the suite.")
+        rel = (self.dm / self.c).values
         return pd.DataFrame(
-            data=np.diag([(benchmark.dm / benchmark.m) ** 2 for benchmark in self.benchmarks.values()]),
+            data=rel[:, None] * self.corr_m.values * rel[None, :],
             index=self.titles,
             columns=self.titles,
         )
@@ -489,20 +542,25 @@ class BenchmarkSuite:
         ).fillna(0)
 
     @classmethod
-    def from_list(cls, benchmarks: list[Benchmark]):
+    def from_list(cls, benchmarks: list[Benchmark], exp_corr: dict[tuple[str, str], float] | None = None):
         """Factory method to create a BenchmarkSuite instance from a list of Benchmark objects.
 
         Parameters
         ----------
         benchmarks : list[Benchmark]
             A list of Benchmark objects to be included in the suite.
+        exp_corr : dict[tuple[str, str], float], optional
+            Experimental correlations keyed by pairs of benchmark titles.
 
         Returns
         -------
         BenchmarkSuite
             An instance of BenchmarkSuite containing the provided Benchmark objects.
         """
-        return cls(benchmarks={benchmark.title: benchmark for benchmark in benchmarks})
+        return cls(
+            benchmarks={benchmark.title: benchmark for benchmark in benchmarks},
+            exp_corr=dict(exp_corr or {}),
+        )
 
     @classmethod
     def from_hdf5(cls, file_path: str, titles: list | None, kind: str = "keff"):
@@ -595,7 +653,14 @@ class BenchmarkSuite:
                 else:
                     raise TypeError("'title'/'titles' must be a string, list, or None")
 
-        return cls(benchmarks=benchmarks)
+        exp_corr = {}
+        for entry in config.get("experimental_correlations", []):
+            pair = tuple(entry["benchmarks"])
+            if len(pair) != 2:
+                raise ValueError(f"Correlation entry {entry!r} must list exactly two benchmarks")
+            exp_corr[pair] = entry["rho"]
+
+        return cls(benchmarks=benchmarks, exp_corr=exp_corr)
 
     def get(self, title: str) -> Benchmark | None:
         """
@@ -623,6 +688,7 @@ class BenchmarkSuite:
             Title of the benchmark to be removed.
         """
         self.benchmarks.pop(title, None)
+        self.exp_corr = {pair: rho for pair, rho in self.exp_corr.items() if title not in pair}
 
     def update_c(self, new_c: pd.Series) -> "BenchmarkSuite":
         """
@@ -647,7 +713,10 @@ class BenchmarkSuite:
         KeyError
             If a benchmark title in the suite is missing from the index of `new_c`.
         """
-        return BenchmarkSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.benchmarks.items()})
+        return BenchmarkSuite(
+            {title: replace(bm, c=new_c.loc[title]) for title, bm in self.benchmarks.items()},
+            exp_corr=self.exp_corr,
+        )
 
     def filter(self, filter_fn) -> "BenchmarkSuite":
         """Filter the BenchmarkSuite based on a filter function and print a summary of the benchmarks removed.
@@ -671,7 +740,7 @@ class BenchmarkSuite:
             print(f"    Removed benchmarks: {', '.join(removed_benchmarks)} \n")
         else:
             print("    No benchmarks were removed. \n")
-        return BenchmarkSuite(benchmarks=filtered_benchmarks)
+        return BenchmarkSuite(benchmarks=filtered_benchmarks, exp_corr=self._corr_for(filtered_benchmarks))
 
 
 if __name__ == "__main__":

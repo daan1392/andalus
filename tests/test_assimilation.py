@@ -597,3 +597,27 @@ class TestFluxSimMatrix:
         object.__setattr__(suite.benchmarks["B1"], "flux", None)
         with pytest.raises(AssertionError, match="no flux spectrum"):
             suite.flux_sim_matrix()
+
+
+def test_glls_experimental_correlation(assimilation_setup):
+    """Correlated experiments enter the GLLS covariance and are carried to the posterior."""
+    suite = assimilation_setup
+    titles = suite.benchmarks.titles
+    assert len(titles) >= 2
+    pair = (titles[0], titles[1])
+
+    correlated = AssimilationSuite(
+        benchmarks=type(suite.benchmarks)(suite.benchmarks.benchmarks, exp_corr={pair: 0.8}),
+        applications=suite.applications,
+        covariances=suite.covariances,
+    )
+
+    cov = correlated._benchmark_covariance()
+    base = suite._benchmark_covariance()
+    rel = suite.benchmarks.dm / suite.benchmarks.c
+    assert cov.loc[pair] - base.loc[pair] == pytest.approx(0.8 * rel[pair[0]] * rel[pair[1]])
+
+    post = correlated.glls()
+    assert post.benchmarks.exp_corr == {pair: 0.8}
+    assert np.abs(post.applications.c - suite.glls().applications.c).max() > 1e-8
+    assert correlated.filter(lambda bm: True).benchmarks.exp_corr == {pair: 0.8}

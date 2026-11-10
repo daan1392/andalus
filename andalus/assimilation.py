@@ -494,6 +494,31 @@ class AssimilationSuite:
             prior_c=self.prior_c,
         )
 
+    def _benchmark_covariance(self, nuclear_data: bool = True) -> pd.DataFrame:
+        r"""Build the relative covariance matrix of the benchmark responses.
+
+        .. math::
+            V = V_m + \mathrm{diag}\left(\frac{\sigma_c^2}{c^2}\right) + S^T C S
+
+        where :math:`V_m` is the measurement covariance including experimental
+        correlations (see :attr:`BenchmarkSuite.cov_m`). Calculation uncertainties
+        are uncorrelated, and the nuclear data term is only added if requested.
+
+        Parameters
+        ----------
+        nuclear_data : bool, optional
+            Whether to add the nuclear data contribution ``S^T C S``, by default True.
+
+        Returns
+        -------
+        pd.DataFrame
+            Covariance matrix indexed by benchmark title.
+        """
+        cov = self.benchmarks.cov_m + np.diag((self.benchmarks.dc / self.benchmarks.c).values ** 2)
+        if nuclear_data:
+            cov = cov + sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
+        return cov
+
     def glls(self, include_sensitivity_uncertainty: bool = False) -> "AssimilationSuite":
         """Perform a GLLS update [1] on the assimilation suite using the sensitivity
         profiles and covariance data loaded in the AssimilationSuite. This method updates
@@ -520,8 +545,8 @@ class AssimilationSuite:
         if self.applications is None or self.benchmarks is None:
             raise ValueError("glls() cannot be called: applications or benchmarks are not initialized.")
 
-        # Calculate prior covariance matrix of the benchmarks
-        cov_prior = sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
+        # Total benchmark covariance: nuclear data + (correlated) measurement + calculation uncertainty
+        cov_total = self._benchmark_covariance(nuclear_data=True)
 
         # Propagate the uncertainty on the sensitivity profiles (ds already stored in relative units)
         cov_ds = (
@@ -534,14 +559,6 @@ class AssimilationSuite:
             else None
         )
 
-        # Build total benchmark covariance before inversion
-        cov_exp_calc = pd.DataFrame(
-            np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2),
-            index=cov_prior.index,
-            columns=cov_prior.columns,
-        )
-
-        cov_total = cov_prior + cov_exp_calc
         if include_sensitivity_uncertainty and cov_ds is not None:
             cov_total = cov_total + cov_ds
 
@@ -583,7 +600,7 @@ class AssimilationSuite:
             post_app[title] = app_
 
         posteriorSuite = AssimilationSuite(
-            benchmarks=BenchmarkSuite(post_bench),
+            benchmarks=BenchmarkSuite(post_bench, exp_corr=self.benchmarks.exp_corr),
             applications=ApplicationSuite(post_app),
             covariances=CovarianceSuite.from_df(Vx_post),
             xs_adjustment=dx,
@@ -612,13 +629,11 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        # Calculate the covariance matrix
-        cov = np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
+        # Marginal (diagonal) variances only: experimental correlations do not
+        # enter the per-benchmark chi-squared.
+        cov = self._benchmark_covariance(nuclear_data)
 
-        if nuclear_data:
-            cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
-
-        cov_inv = np.diag(cov) ** -1
+        cov_inv = np.diag(cov.values) ** -1
 
         b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.c
 
@@ -638,12 +653,9 @@ class AssimilationSuite:
             Whether to include the contribution of the nuclear data
             uncertainty in the chi² calculation, by default False.
         """
-        cov = np.diag((self.benchmarks.dm / self.benchmarks.c) ** 2 + (self.benchmarks.dc / self.benchmarks.c) ** 2)
+        cov = self._benchmark_covariance(nuclear_data)
 
-        if nuclear_data:
-            cov += sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
-
-        cov_inv = np.linalg.pinv(cov)
+        cov_inv = np.linalg.pinv(cov.values)
 
         b = (self.benchmarks.m - self.benchmarks.c) / self.benchmarks.c
 
