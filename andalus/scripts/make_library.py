@@ -56,19 +56,41 @@ QUANTITIES = ("xs", "covariances")
 
 # ERRORR section -> keyword of ``sandy.Endf6.get_errorr`` that switches it on
 _SWITCH = {"errorr31": "nubar", "errorr33": "xs", "errorr34": "mubar", "errorr35": "chi"}
-_ENDF_NAME = re.compile(r"^(?:n_)?(\d+)-([A-Za-z]+)-(\d+)([gmn]?)\.\w+$")
+# JEFF-4.0 ``n_92-U-235g.jeff``, JEFF-3.3 ``92-U-235g.jeff33`` (state letter g/m/n)
+_JEFF_NAME = re.compile(r"^(?:n_)?(\d+)-([A-Za-z]+)-(\d+)([gmn]?)\.\w+$")
+# ENDF/B-VIII.1 ``n-092_U_235.endf``, ``n-073_Ta_180m1.endf`` (state m1, m2, ...)
+_ENDFB_NAME = re.compile(r"^n-(\d+)_([A-Za-z]+)_(\d+)(?:m(\d+))?\.\w+$")
 _ISOMER = {"": 0, "g": 0, "m": 1, "n": 2}
+
+
+def _parse_name(filename: str) -> int | None:
+    """Return the ZAI of a recognised ENDF-6 file name, else None."""
+    name = os.path.basename(filename)
+    match = _JEFF_NAME.match(name)
+    if match is not None:
+        z, _, a, state = match.groups()
+        return int(z) * 10000 + int(a) * 10 + _ISOMER[state]
+    match = _ENDFB_NAME.match(name)
+    if match is not None:
+        z, _, a, state = match.groups()
+        return int(z) * 10000 + int(a) * 10 + int(state or 0)
+    return None
 
 
 def zai_from_filename(filename: str) -> int:
     """
-    Extract the ZAI from a JEFF ENDF-6 file name.
+    Extract the ZAI from an ENDF-6 file name of a JEFF or ENDF/B library.
 
     Parameters
     ----------
     filename : str
-        File name or path, e.g. ``n_92-U-235g.jeff`` (JEFF-4.0) or ``92-U-235g.jeff33``
-        (JEFF-3.3). The letter after the mass number is the state: ``g`` ground (0), ``m`` first (1), ``n`` second (2).
+        File name or path. Supported patterns:
+
+        * JEFF-4.0 ``n_92-U-235g.jeff`` and JEFF-3.3 ``92-U-235g.jeff33``. The letter after the
+          mass number is the state: ``g`` ground (0), ``m`` first (1), ``n`` second (2).
+        * ENDF/B-VIII.1 ``n-092_U_235.endf`` and ``n-073_Ta_180m1.endf``, where ``m1``, ``m2``
+          are the metastable states.
+
         The element symbol is not searched for state letters, so ``Am``, ``Cm`` or ``Fm`` are
         not mistaken for metastable states.
 
@@ -80,13 +102,12 @@ def zai_from_filename(filename: str) -> int:
     Raises
     ------
     ValueError
-        If the name does not follow the ``[n_]Z-Sym-AAAs.ext`` pattern.
+        If the name matches none of the supported patterns.
     """
-    match = _ENDF_NAME.match(os.path.basename(filename))
-    if match is None:
+    zai = _parse_name(filename)
+    if zai is None:
         raise ValueError(f"Cannot extract a ZAI from file name '{filename}'.")
-    z, _, a, state = match.groups()
-    return int(z) * 10000 + int(a) * 10 + _ISOMER[state]
+    return zai
 
 
 def process_endf6(
@@ -216,7 +237,7 @@ def build_library(
     Parameters
     ----------
     endf6_dir : str
-        Directory with ENDF-6 files named like ``n_92-U-235g.jeff`` or ``92-U-235g.jeff33``.
+        Directory with ENDF-6 files, see :func:`zai_from_filename` for the supported names.
     errorr_dir : str
         Directory for the ERRORR files.
     output : str
@@ -263,8 +284,12 @@ def build_library(
 
     candidates = {}
     for name in sorted(os.listdir(endf6_dir)):
-        if _ENDF_NAME.match(name):
-            candidates[zai_from_filename(name)] = os.path.join(endf6_dir, name)
+        zai = _parse_name(name)
+        if zai is None:
+            continue
+        if zai in candidates:
+            raise ValueError(f"Files '{os.path.basename(candidates[zai])}' and '{name}' have the same ZAI {zai}.")
+        candidates[zai] = os.path.join(endf6_dir, name)
     if zais is not None:
         missing = sorted(set(zais) - set(candidates))
         if missing:

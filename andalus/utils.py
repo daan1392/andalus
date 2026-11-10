@@ -151,6 +151,32 @@ def _warn_uncovered(s, covered, max_listed=10):
     )
 
 
+_LEVELS = ("ZAI", "MT", "E_min_eV", "E_max_eV")
+_ENERGY_LEVELS = ("E_min_eV", "E_max_eV")
+
+
+def _by_levels(by):
+    """Translate the ``by`` argument of ``delta_response`` to a list of index level names (or None)."""
+    if by is None:
+        return None
+    if not isinstance(by, str | list | tuple):
+        raise ValueError(f"`by` must be None, a level name or a list of level names, not {type(by).__name__}.")
+    lookup = {name.lower(): name for name in _LEVELS} | {"nuclide": "ZAI"}
+    levels = []
+    for item in [by] if isinstance(by, str) else list(by):
+        name = lookup.get(item.lower()) if isinstance(item, str) else None
+        if name is None:
+            raise ValueError(f"Invalid `by` entry {item!r}. Use None or a list of {list(_LEVELS)}.")
+        if name not in levels:
+            levels.append(name)
+    if not levels:
+        raise ValueError("`by` must be None or contain at least one level name.")
+    # an energy bin is identified by both of its edges
+    if set(levels) & set(_ENERGY_LEVELS):
+        levels += [name for name in _ENERGY_LEVELS if name not in levels]
+    return levels
+
+
 def delta_response(xs_ref, s, xs_other, by=None):
     r"""
     First-order relative change of responses when replacing ``xs_ref`` by ``xs_other``.
@@ -171,14 +197,18 @@ def delta_response(xs_ref, s, xs_other, by=None):
         Sensitivities with index ``(ZAI, MT, E_min_eV, E_max_eV)``, one column per case.
     xs_other : CrossSectionMG
         Multigroup data to switch to.
-    by : {None, "reaction"}, default None
-        If ``"reaction"``, return the contributions summed per ``(ZAI, MT)``.
+    by : None, str or list of str, default None
+        Index levels to keep in the result, from ``"ZAI"``, ``"MT"``, ``"E_min_eV"`` and
+        ``"E_max_eV"`` (case-insensitive). The contributions are summed over the levels that are
+        not listed. ``None`` gives the total per case. For example ``["ZAI"]`` gives the
+        contribution per nuclide, ``["ZAI", "MT"]`` per reaction and ``["ZAI", "MT", "E_min_eV"]``
+        per energy bin. Listing one energy edge adds the other, since both identify a bin.
 
     Returns
     -------
     pd.Series or pd.DataFrame
-        Relative response change per case, or a DataFrame indexed by ``(ZAI, MT)``
-        with one column per case when ``by="reaction"``.
+        Relative response change per case (Series), or a DataFrame with one column per case
+        and the requested levels as index. The contributions add up to the total.
 
     Raises
     ------
@@ -190,8 +220,7 @@ def delta_response(xs_ref, s, xs_other, by=None):
     UserWarning
         If sensitivity bins with a non-zero value have no cross section data.
     """
-    if by not in (None, "reaction"):
-        raise ValueError("`by` must be None or 'reaction'.")
+    levels = _by_levels(by)
     rel = CrossSectionMG(pd.DataFrame(xs_other)).relative_difference(xs_ref)
     s = pd.DataFrame(s)
     if s.index.intersection(rel.index).empty:
@@ -201,6 +230,6 @@ def delta_response(xs_ref, s, xs_other, by=None):
         )
     _warn_uncovered(s, rel.index)
     contrib = s.reindex(rel.index, fill_value=0.0).mul(rel, axis=0)
-    if by == "reaction":
-        return contrib.groupby(level=["ZAI", "MT"]).sum()
+    if levels is not None:
+        return contrib.groupby(level=levels).sum()
     return contrib.sum(axis=0).rename("delta_response")

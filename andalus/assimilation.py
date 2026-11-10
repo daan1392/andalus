@@ -400,7 +400,7 @@ class AssimilationSuite:
 
         return cls(benchmarks=benchmarks, applications=applications, covariances=covariances, xs=xs)
 
-    def delta_response(self, xs_other, by: str | None = None) -> pd.Series | pd.DataFrame:
+    def delta_response(self, xs_other, by: str | list[str] | None = None) -> pd.Series | pd.DataFrame:
         r"""Relative first-order change of every case's response (e.g. keff) when
         the prior multigroup data ``self.prior_xs`` is replaced by ``xs_other``.
 
@@ -412,8 +412,10 @@ class AssimilationSuite:
         ----------
         xs_other : CrossSectionMG
             Multigroup data to switch to.
-        by : {None, "reaction"}, default None
-            Return the contribution per ``(ZAI, MT)`` instead of the total.
+        by : None, str or list of str, default None
+            Index levels to keep, from ``"ZAI"``, ``"MT"``, ``"E_min_eV"`` and ``"E_max_eV"``,
+            e.g. ``["ZAI", "MT"]`` for the contribution per reaction. ``None`` gives the total
+            per case. See :func:`andalus.utils.delta_response`.
 
         Returns
         -------

@@ -80,7 +80,7 @@ class TestDeltaResponse:
         ref = _make([1.0, 2.0, 10.0, 20.0])
         new = _make([1.1, 2.2, 10.0, 20.0])
         s = pd.DataFrame({"case": [1.0, 1.0, 1.0, 1.0]}, index=ref.index)
-        out = delta_response(ref, s, new, by="reaction")
+        out = delta_response(ref, s, new, by=["ZAI", "MT"])
         np.testing.assert_allclose(out.loc[(922350, 2), "case"], 0.2)
         np.testing.assert_allclose(out.loc[(922350, 18), "case"], 0.0)
 
@@ -104,6 +104,58 @@ class TestDeltaResponse:
         s = pd.DataFrame({"case": [0.1] * 4}, index=ref.index)
         delta_response(ref, s, ref)
         assert not [w for w in recwarn if issubclass(w.category, UserWarning)]
+
+    @staticmethod
+    def _two_zai_case():
+        groups = [(1e-5, 1.0), (1.0, 2e7)]
+        tuples = [(z, mt, lo, hi) for z in (922350, 922380) for mt in (2, 18) for lo, hi in groups]
+        idx = pd.MultiIndex.from_tuples(tuples, names=["ZAI", "MT", "E_min_eV", "E_max_eV"])
+        ref = CrossSectionMG(pd.DataFrame({"lib": np.arange(1.0, 9.0)}, index=idx))
+        new = CrossSectionMG(pd.DataFrame({"lib": np.arange(1.0, 9.0) * np.linspace(1.0, 1.7, 8)}, index=idx))
+        s = pd.DataFrame({"a": np.linspace(0.1, 0.8, 8), "b": np.linspace(-0.4, 0.3, 8)}, index=idx)
+        return ref, new, s
+
+    @pytest.mark.parametrize(
+        "by, levels",
+        [
+            ("ZAI", ["ZAI"]),
+            (["ZAI"], ["ZAI"]),
+            ("nuclide", ["ZAI"]),
+            (["mt"], ["MT"]),
+            (["ZAI", "MT"], ["ZAI", "MT"]),
+            (["zai", "mt", "E_min_eV"], ["ZAI", "MT", "E_min_eV", "E_max_eV"]),
+            (["ZAI", "E_max_eV"], ["ZAI", "E_max_eV", "E_min_eV"]),
+            (["MT", "ZAI"], ["MT", "ZAI"]),
+            (["ZAI", "ZAI", "MT"], ["ZAI", "MT"]),
+            (("ZAI", "MT"), ["ZAI", "MT"]),
+        ],
+    )
+    def test_by_breakdowns_add_up_to_total(self, by, levels):
+        ref, new, s = self._two_zai_case()
+        total = delta_response(ref, s, new)
+        out = delta_response(ref, s, new, by=by)
+        assert list(out.index.names) == levels
+        np.testing.assert_allclose(out.sum(axis=0), total)
+
+    def test_by_zai_values(self):
+        ref, new, s = self._two_zai_case()
+        rel = new.relative_difference(ref)
+        out = delta_response(ref, s, new, by=["ZAI"])
+        expected = s.mul(rel, axis=0).xs(922380, level="ZAI").sum()
+        np.testing.assert_allclose(out.loc[922380], expected)
+
+    def test_by_energy_matches_reaction_sum(self):
+        ref, new, s = self._two_zai_case()
+        by_energy = delta_response(ref, s, new, by=["E_min_eV", "E_max_eV"])
+        assert len(by_energy) == 2
+        by_bin = delta_response(ref, s, new, by=["ZAI", "MT", "E_min_eV"])
+        np.testing.assert_allclose(by_bin.groupby(level=["E_min_eV", "E_max_eV"]).sum(), by_energy)
+
+    @pytest.mark.parametrize("bad", ["nope", ["ZAI", "nope"], [], 3, "reaction", "energy"])
+    def test_invalid_by_entries(self, bad):
+        ref, new, s = self._two_zai_case()
+        with pytest.raises(ValueError):
+            delta_response(ref, s, new, by=bad)
 
     def test_invalid_by(self):
         ref = _make([1.0] * 4)

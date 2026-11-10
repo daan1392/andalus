@@ -12,6 +12,12 @@ from andalus.scripts.make_library import build_library, main, remove_zais, zai_f
     "name, zai",
     [
         ("n_92-U-235g.jeff", 922350),
+        ("n-092_U_235.endf", 922350),
+        ("n-073_Ta_180m1.endf", 731801),
+        ("n-095_Am_242m1.endf", 952421),
+        ("n-095_Am_242.endf", 952420),
+        ("n-000_n_001.endf", 10),
+        ("n-001_H_001.endf", 10010),
         ("92-U-235g.jeff33", 922350),
         ("95-Am-242m.jeff33", 952421),
         ("n_1-H-001g.jeff", 10010),
@@ -145,3 +151,12 @@ def test_remove_option_in_build(workspace):
     CrossSectionMG.from_hdf5(out).rename(index={922350: 952411}, level="ZAI").to_hdf5(out)
     build_library(endf6, errorr, out, sections=("errorr35",), quantities=("xs",), remove=[952411])
     assert CrossSectionMG.from_hdf5(out).zais == [922350]
+
+
+def test_duplicate_zai_in_directory(tmp_path):
+    endf6 = tmp_path / "endf6"
+    endf6.mkdir()
+    (endf6 / "n_92-U-235g.jeff").write_text("")
+    (endf6 / "n-092_U_235.endf").write_text("")
+    with pytest.raises(ValueError, match="same ZAI"):
+        build_library(str(endf6), str(tmp_path / "errorr"), str(tmp_path / "lib.h5"))
