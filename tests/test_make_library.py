@@ -40,13 +40,13 @@ def test_zai_from_filename_invalid():
 
 @pytest.fixture
 def workspace(tmp_path):
-    """ENDF-6 stand-in plus ready-made ERRORR files, so that NJOY is not run."""
+    """ENDF-6 stand-in plus ready-made GENDF and ERRORR files, so that NJOY is not run."""
     endf6 = tmp_path / "endf6"
     errorr = tmp_path / "errorr"
     endf6.mkdir()
     errorr.mkdir()
     (endf6 / "n_92-U-235g.jeff").write_text("")
-    for section in ("errorr31", "errorr33", "errorr34", "errorr35"):
+    for section in ("gendf", "errorr31", "errorr33", "errorr34", "errorr35"):
         shutil.copy(f"data/u235.{section}", errorr / f"n_92-U-235g.{section}")
     return str(endf6), str(errorr), str(tmp_path / "lib.h5")
 
@@ -175,6 +175,7 @@ class _FakeEndf6:
     """ENDF-6 stand-in that has the given MF numbers and records NJOY requests."""
 
     calls: list = []
+    gendf_calls: list = []
     mfs = (33, 34)
 
     @classmethod
@@ -183,6 +184,10 @@ class _FakeEndf6:
 
     def get_records(self):
         return pd.DataFrame({"MF": list(self.mfs)})
+
+    def get_gendf(self, **kwargs):
+        type(self).gendf_calls.append(kwargs)
+        return _FakeErrorr("data/u235.gendf")
 
     def get_errorr(self, **kwargs):
         type(self).calls.append(kwargs)
@@ -196,6 +201,7 @@ class _FakeEndf6:
 @pytest.fixture
 def fake_njoy(monkeypatch):
     _FakeEndf6.calls = []
+    _FakeEndf6.gendf_calls = []
     _FakeEndf6.mfs = (33, 34)
     monkeypatch.setattr(ml.sandy, "Endf6", _FakeEndf6)
     return _FakeEndf6
@@ -235,3 +241,44 @@ def test_add_legendre_to_existing_library(workspace):
     assert xs.label == "lib"
     cov = Covariance.from_hdf5(out, zai=922350)
     assert {2, 18, 34251} <= set(cov.index.get_level_values("MT"))
+
+
+def test_xs_come_from_gendf_by_default(workspace):
+    endf6, errorr, out = workspace
+    build_library(endf6, errorr, out, label="lib")
+    mts = set(CrossSectionMG.from_hdf5(out).index.get_level_values("MT"))
+    assert {51, 103, 107, 455, 34251, 35018} <= mts  # reactions ERRORR has no covariance, hence no data, for
+    assert not Covariance.from_hdf5(out, zai=922350).empty
+
+
+def test_nuclide_without_covariances_gets_xs(workspace):
+    endf6, errorr, out = workspace
+    for section in ("errorr31", "errorr33", "errorr34", "errorr35"):
+        os.remove(f"{errorr}/n_92-U-235g.{section}")
+    outcome = build_library(endf6, errorr, out, sections=("gendf",))
+    assert outcome["written"] == [922350]
+    assert 18 in CrossSectionMG.from_hdf5(out).index.get_level_values("MT")
+    with pd.HDFStore(out, mode="r") as store:
+        assert not any("covariances" in key for key in store.keys())
+
+
+def test_process_endf6_runs_groupr_for_gendf(workspace, fake_njoy):
+    endf6, errorr, _ = workspace
+    os.remove(f"{errorr}/n_92-U-235g.gendf")
+    fake_njoy.mfs = (3,)  # no covariance data at all
+    files = ml.process_endf6(f"{endf6}/n_92-U-235g.jeff", errorr, sections=("gendf", "errorr33"))
+    assert set(files) == {"gendf", "errorr33"}  # errorr33 was already there
+    assert fake_njoy.calls == [] and len(fake_njoy.gendf_calls) == 1
+    assert "errorr_kws" not in fake_njoy.gendf_calls[0]
+
+
+def test_free_neutron_is_logged(tmp_path):
+    """ENDF/B has an evaluation for the free neutron (Z = 0), which has no element symbol."""
+    endf6, errorr = tmp_path / "endf6", tmp_path / "errorr"
+    endf6.mkdir()
+    errorr.mkdir()
+    (endf6 / "n-000_n_001.endf").write_text("")
+    shutil.copy("data/u235.gendf", errorr / "n-000_n_001.gendf")
+    outcome = build_library(str(endf6), str(errorr), str(tmp_path / "lib.h5"), sections=("gendf",), quantities=("xs",))
+    assert outcome["written"] == [10]
+    assert ml._nuclide_name(10) == "n" and ml._nuclide_name(922350) == "U235"

@@ -223,15 +223,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        # Do not concatenate if there are only benchmarks or applications.
-        if self.benchmarks is None and self.applications:
-            return self.applications.s
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.s
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.s, self.applications.s], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.s)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.s)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def ds(self):
@@ -253,14 +256,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.ds
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.ds
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.ds)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.ds)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def flux(self):
@@ -282,15 +289,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        # Do not concatenate if there are only benchmarks or applications.
-        if self.benchmarks is None and self.applications:
-            return self.applications.flux
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.flux
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.flux, self.applications.flux], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.flux)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.flux)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def dflux(self):
@@ -312,14 +322,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.dflux
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.dflux
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.dflux, self.applications.dflux], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.dflux)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.dflux)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def is_posterior(self) -> bool:

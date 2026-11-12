@@ -1,8 +1,9 @@
 """Build (or extend) an HDF5 nuclear data library from ENDF-6 files.
 
 For every ENDF-6 evaluation in a directory, NJOY (through SANDY) is run to
-produce multigroup ERRORR files. These are stored in a directory, and the
-multigroup data and covariances read from them are written to a single HDF5
+produce a multigroup GROUPR file (GENDF) and ERRORR files. These are stored in
+a directory. The multigroup data is read from the GENDF file and the
+covariances from the ERRORR files, and both are written to a single HDF5
 file with ``CrossSectionMG.to_hdf5`` and ``Covariance.to_hdf5``::
 
     zai_{ZAI}/xs/data
@@ -13,8 +14,13 @@ An existing HDF5 file is extended, not replaced. With ``--quantities xs`` only
 the multigroup data is written, and its MT numbers are merged into the stored
 table, so for example chi (MT 35018) can be added to an existing library.
 
-ERRORR sections and the MT numbers they hold:
+Sections and the MT numbers they hold:
 
+* ``gendf``: GROUPR output with the multigroup data of every reaction: all cross sections of
+  MF3, nubar (MT 452, 455, 456), mubar (stored as 34251) and chi (stored as 35018). It exists
+  for every evaluation, also those without covariance data, and is the source of the
+  multigroup data whenever it is selected. ERRORR only writes the reactions it has a
+  covariance for; without ``gendf`` the multigroup data is read from the ERRORR files.
 * ``errorr31``: nubar (MT 452, 455, 456)
 * ``errorr33``: cross sections (MT 1, 2, 4, 16, 18, 102, ...)
 * ``errorr34``: first-order Legendre moment of the elastic angular distribution, i.e. mubar
@@ -25,7 +31,12 @@ ERRORR sections and the MT numbers they hold:
 
 Examples
 --------
-Chi only, for two nuclides, added to an existing library::
+Multigroup data of all reactions and nuclides, added to an existing library::
+
+    python -m andalus.scripts.make_library --endf6-dir endf6 --errorr-dir errorr \\
+        --output jeff40.h5 --sections gendf --quantities xs --jobs 4
+
+Chi only, read from ERRORR, for two nuclides, added to an existing library::
 
     python -m andalus.scripts.make_library --endf6-dir endf6 --errorr-dir errorr \\
         --output jeff40.h5 --sections errorr35 --quantities xs --zais 922350 922380
@@ -52,13 +63,14 @@ import tables
 from andalus.covariance import Covariance
 from andalus.cross_section import CrossSectionMG
 
-SECTIONS = ("errorr31", "errorr33", "errorr34", "errorr35")
-DEFAULT_SECTIONS = ("errorr31", "errorr33", "errorr35")  # angular distribution (errorr34) is opt-in
+GENDF = "gendf"  # GROUPR output, the source of the multigroup data
+SECTIONS = (GENDF, "errorr31", "errorr33", "errorr34", "errorr35")
+DEFAULT_SECTIONS = (GENDF, "errorr31", "errorr33", "errorr35")  # angular distribution (errorr34) is opt-in
 QUANTITIES = ("xs", "covariances")
 
 # ENDF-6 files (MF) in which an ERRORR section finds its covariance; MF32 (resonance parameters)
 # is processed into the cross section covariance as well
-_MF_NEEDED = {"errorr31": {31}, "errorr33": {32, 33}, "errorr34": {34}, "errorr35": {35}}
+_MF_NEEDED = {GENDF: {3}, "errorr31": {31}, "errorr33": {32, 33}, "errorr34": {34}, "errorr35": {35}}
 # ERRORR section -> keyword of ``sandy.Endf6.get_errorr`` that switches it on
 _SWITCH = {"errorr31": "nubar", "errorr33": "xs", "errorr34": "mubar", "errorr35": "chi"}
 # JEFF-4.0 ``n_92-U-235g.jeff``, JEFF-3.3 ``92-U-235g.jeff33`` (state letter g/m/n)
@@ -80,6 +92,14 @@ def _parse_name(filename: str) -> int | None:
         z, _, a, state = match.groups()
         return int(z) * 10000 + int(a) * 10 + int(state or 0)
     return None
+
+
+def _nuclide_name(zai: int) -> str:
+    """Name of a nuclide for the log, e.g. ``U235``; the free neutron (Z = 0) has no element symbol."""
+    try:
+        return sandy.zam.zam2nuclide(zai)
+    except KeyError:
+        return "n" if zai == 10 else "?"
 
 
 def zai_from_filename(filename: str) -> int:
@@ -125,20 +145,21 @@ def process_endf6(
     overwrite: bool = False,
 ) -> dict[str, str]:
     """
-    Run NJOY on one ENDF-6 file and store the ERRORR files.
+    Run NJOY on one ENDF-6 file and store the GENDF and ERRORR files.
 
-    Each section is processed separately: existing ERRORR files are reused unless ``overwrite``
+    Each section is processed separately: existing files are reused unless ``overwrite``
     is set, and sections that the evaluation has no data for (e.g. no MF34) are skipped. NJOY is
-    only run if at least one section is left.
+    only run if at least one section is left, once for the GENDF file and once for the ERRORR
+    files.
 
     Parameters
     ----------
     endf6_path : str
         Path to the ENDF-6 file.
     errorr_dir : str
-        Directory for the ERRORR files, named ``{endf6 file stem}.{section}``.
+        Directory for the GENDF and ERRORR files, named ``{endf6 file stem}.{section}``.
     sections : tuple of str
-        ERRORR sections to produce, a subset of ``SECTIONS``.
+        Sections to produce, a subset of ``SECTIONS``.
     temperature : float, default 300.0
         Temperature in K.
     err : float, default 0.01
@@ -146,12 +167,12 @@ def process_endf6(
     energy_grid : str, default "ECCO33"
         Name of a grid in ``sandy.energy_grids`` (e.g. ``ECCO33``, ``SCALE238``).
     overwrite : bool, default False
-        Run NJOY even if ERRORR files exist.
+        Run NJOY even if the files exist.
 
     Returns
     -------
     dict[str, str]
-        Mapping of section name to ERRORR file path, for the sections that exist
+        Mapping of section name to file path, for the sections that exist
         (an evaluation without MF35 gives no ``errorr35``).
     """
     stem = os.path.splitext(os.path.basename(endf6_path))[0]
@@ -165,8 +186,7 @@ def process_endf6(
         todo = [key for key in todo if mfs & _MF_NEEDED[key]]  # skip sections the evaluation does not have
     if todo:
         ek = getattr(sandy.energy_grids, energy_grid)
-        switches = {_SWITCH[key]: (None if key in todo else False) for key in SECTIONS}
-        errorrs = endf6.get_errorr(
+        njoy_kws = dict(
             temperature=temperature,
             err=err,
             heatr=False,
@@ -174,15 +194,18 @@ def process_endf6(
             gaspr=False,
             thermr=False,
             groupr_kws=dict(ek=ek),
-            errorr_kws=dict(ek=ek),
             suppress_njoy_output=True,
             suppress_warnings=True,
-            **switches,
         )
         os.makedirs(errorr_dir, exist_ok=True)
-        for key, errorr in errorrs.items():
-            if key in todo:
-                errorr.to_file(paths[key])
+        if GENDF in todo:
+            endf6.get_gendf(**njoy_kws).to_file(paths[GENDF])
+        if set(todo) - {GENDF}:
+            switches = {_SWITCH[key]: (None if key in todo else False) for key in _SWITCH}
+            errorrs = endf6.get_errorr(errorr_kws=dict(ek=ek), **njoy_kws, **switches)
+            for key, errorr in errorrs.items():
+                if key in todo:
+                    errorr.to_file(paths[key])
 
     return {key: path for key, path in paths.items() if os.path.exists(path)}
 
@@ -252,11 +275,13 @@ def build_library(
     endf6_dir : str
         Directory with ENDF-6 files, see :func:`zai_from_filename` for the supported names.
     errorr_dir : str
-        Directory for the ERRORR files.
+        Directory for the GENDF and ERRORR files.
     output : str
         HDF5 file, created or extended.
     sections : tuple of str
-        ERRORR sections to process, a subset of ``SECTIONS``.
+        Sections to process, a subset of ``SECTIONS``. With ``"gendf"`` the multigroup data is
+        read from the GROUPR output (every reaction, also for nuclides without covariances),
+        otherwise from the ERRORR sections (only reactions with a covariance).
     quantities : tuple of str
         ``"xs"`` for multigroup data, ``"covariances"`` for covariances. A stored
         covariance is replaced by one built from the selected ``sections`` only,
@@ -277,7 +302,7 @@ def build_library(
     jobs : int, default 1
         Number of NJOY runs in parallel. HDF5 writing is always sequential.
     overwrite : bool, default False
-        Run NJOY again even if ERRORR files exist.
+        Run NJOY again even if the GENDF and ERRORR files exist.
     replace : bool, default False
         Delete the stored data of a ZAI right before writing its new data, instead of
         merging into it. ZAIs for which nothing is produced keep their stored data.
@@ -358,18 +383,22 @@ def build_library(
         try:
             if replace:
                 remove_zais(output, [zai])
+            errorr_files = {key: path for key, path in files.items() if key != GENDF}
             if "xs" in quantities:
-                xs = CrossSectionMG.from_errorr(files, zai, mts=mts, temperature=temperature, label=label)
+                if GENDF in files:  # GROUPR has every reaction, ERRORR only those with a covariance
+                    xs = CrossSectionMG.from_gendf(files[GENDF], zai, mts=mts, temperature=temperature, label=label)
+                else:
+                    xs = CrossSectionMG.from_errorr(errorr_files, zai, mts=mts, temperature=temperature, label=label)
                 xs.to_hdf5(output, merge=True)
-            if "covariances" in quantities:
-                cov = Covariance.from_errorr(files, zai, mts=mts, temperature=temperature, err=err)
+            if "covariances" in quantities and errorr_files:
+                cov = Covariance.from_errorr(errorr_files, zai, mts=mts, temperature=temperature, err=err)
                 cov.to_hdf5(output, merge=merge_covariances)
         except Exception as exc:
             outcome["failed"].append(zai)
             log(f"ZAI {zai} FAILED while writing: {exc!r}")
             return
         outcome["written"].append(zai)
-        log(f"ZAI {zai} ({sandy.zam.zam2nuclide(zai)}): wrote {sorted(files)}")
+        log(f"ZAI {zai} ({_nuclide_name(zai)}): wrote {sorted(files)}")
 
     if jobs > 1:
         with ProcessPoolExecutor(max_workers=jobs) as pool:
@@ -395,20 +424,18 @@ def main(argv: list[str] | None = None) -> int:
     """Command line entry point, see the module docstring."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0], formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--endf6-dir", required=True, help="directory with ENDF-6 files (n_92-U-235g.jeff)")
-    parser.add_argument("--errorr-dir", required=True, help="directory for the ERRORR files")
+    parser.add_argument("--errorr-dir", required=True, help="directory for the GENDF and ERRORR files")
     parser.add_argument("--output", required=True, help="HDF5 library to create or extend")
     parser.add_argument("--sections", nargs="+", default=list(DEFAULT_SECTIONS), choices=SECTIONS)
     parser.add_argument("--quantities", nargs="+", default=list(QUANTITIES), choices=QUANTITIES)
-    parser.add_argument(
-        "--mts", nargs="+", type=int, help="keep only these MT numbers (e.g. 2 18 102 456 34251 35018)"
-    )
+    parser.add_argument("--mts", nargs="+", type=int, help="keep only these MT numbers (e.g. 2 18 102 456 34251 35018)")
     parser.add_argument("--temperature", type=float, default=300.0, help="temperature in K")
     parser.add_argument("--err", type=float, default=0.01, help="NJOY reconstruction tolerance (fractional)")
     parser.add_argument("--energy-grid", default="ECCO33", help="name in sandy.energy_grids")
     parser.add_argument("--zais", nargs="+", type=int, help="only process these ZAIs")
     parser.add_argument("--label", default="xs", help="column name of new multigroup tables")
     parser.add_argument("--jobs", type=int, default=1, help="parallel NJOY runs")
-    parser.add_argument("--overwrite", action="store_true", help="rerun NJOY even if ERRORR files exist")
+    parser.add_argument("--overwrite", action="store_true", help="rerun NJOY even if GENDF and ERRORR files exist")
     parser.add_argument("--replace", action="store_true", help="replace stored data of processed ZAIs, do not merge")
     parser.add_argument(
         "--merge-covariances", action="store_true", help="merge new covariances into stored ones, MT by MT"

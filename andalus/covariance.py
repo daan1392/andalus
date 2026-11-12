@@ -398,6 +398,8 @@ class Covariance(pd.DataFrame):
 
     def is_unrealistic_uncertainty(self, threshold=10):
         """Check if diagonal elements (variances) exceed a threshold."""
+        if self.empty:
+            return False
         return np.diag(self.values).max() > threshold
 
 

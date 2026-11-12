@@ -114,9 +114,26 @@ def uncertainty_reactionwise(s1, cov, s2=None):
     -------
     pd.Series
         A Series with a MultiIndex (ZAI_1, MT_1, ZAI_2, MT_2) representing the
-        uncertainty contribution of each reaction.
+        uncertainty contribution of each reaction, sorted by absolute value.
+
+    Notes
+    -----
+    The two mirrored off-diagonal blocks of a reaction pair, e.g.
+    (942390, 18, 942390, 102) and (942390, 102, 942390, 18), are summed into
+    a single entry with (ZAI_1, MT_1) <= (ZAI_2, MT_2). The variances
+    (signed squares of the returned values) therefore still add up to the
+    total variance ``sandwich(s1, cov, s2)``.
     """
-    variances = sandwich_binwise(s1, cov, s2).groupby(["ZAI_1", "MT_1", "ZAI_2", "MT_2"]).sum()
+    levels = ["ZAI_1", "MT_1", "ZAI_2", "MT_2"]
+    variances = sandwich_binwise(s1, cov, s2).groupby(levels).sum()
+
+    # Collapse mirrored pairs (a, b) and (b, a): order each pair so that
+    # (ZAI_1, MT_1) <= (ZAI_2, MT_2), then sum the variances.
+    idx = variances.index.to_frame(index=False)
+    swap = (idx["ZAI_1"] > idx["ZAI_2"]) | ((idx["ZAI_1"] == idx["ZAI_2"]) & (idx["MT_1"] > idx["MT_2"]))
+    idx.loc[swap, levels] = idx.loc[swap, ["ZAI_2", "MT_2", "ZAI_1", "MT_1"]].to_numpy()
+    variances.index = pd.MultiIndex.from_frame(idx)
+    variances = variances.groupby(levels).sum()
 
     uncertainties = np.sign(variances) * np.sqrt(np.abs(variances))
 

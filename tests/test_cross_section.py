@@ -270,3 +270,54 @@ class TestSuiteAssimilation:
 
         filtered = post.filter(Chi2Filter(threshold=1e6))
         assert filtered.prior_xs is post.prior_xs
+
+
+class TestFromGendf:
+    """GROUPR output (JEFF-4.0 U-235, ECCO-33) holds every reaction, not only those with a covariance."""
+
+    @pytest.fixture
+    def gendf(self):
+        return CrossSectionMG.from_gendf("data/u235.gendf", zai=922350, label="lib", temperature=300.0)
+
+    def test_index_and_mts(self, gendf):
+        assert list(gendf.index.names) == ["ZAI", "MT", "E_min_eV", "E_max_eV"]
+        assert gendf.index.is_unique
+        assert gendf.label == "lib" and gendf.zais == [922350] and gendf.temperature == 300.0
+        mts = set(gendf.index.get_level_values("MT"))
+        # inelastic levels, (n,p) and (n,a) have no covariance in the evaluation, mubar and chi are offset
+        assert {1, 2, 4, 18, 51, 91, 102, 103, 107, 452, 455, 456, 34251, 35018} <= mts
+        assert 251 not in mts
+        assert (gendf.groupby(level="MT").size() == 33).all()
+
+    def test_values(self, gendf):
+        first = gendf["lib"].xs(922350, level="ZAI").groupby(level="MT").first()
+        np.testing.assert_allclose(first[[1, 2, 18, 102]], [688.8231, 14.09608, 574.6539, 100.0731], rtol=1e-6)
+        np.testing.assert_allclose(first[[452, 456]], [2.436623, 2.420358], rtol=1e-6)  # the ratio, not the flux
+        assert first[16] == 0.0  # below the (n,2n) threshold
+
+    def test_chi_is_normalised(self, gendf):
+        chi = gendf["lib"].xs((922350, 35018), level=("ZAI", "MT"))
+        assert chi.sum() == pytest.approx(1.0, abs=1e-6)
+
+    def test_mts_filter(self):
+        x = CrossSectionMG.from_gendf("data/u235.gendf", zai=922350, mts=[18, 35018])
+        assert set(x.index.get_level_values("MT")) == {18, 35018}
+
+    def test_energy_grid_matches_errorr(self, gendf):
+        """GROUPR writes the lowest boundary as 1.00001e-5 eV; it must line up with ERRORR and Serpent (1e-5)."""
+        e_min = gendf.index.get_level_values("E_min_eV")
+        assert e_min.min() == 1e-5
+        assert gendf.index.get_level_values("E_max_eV").max() == pytest.approx(1.96403e7)
+
+    def test_groups_missing_in_between_are_zero(self, gendf, tmp_path):
+        """GROUPR leaves out zero groups, also in the middle of the range; values are placed by group index."""
+        lines = open("data/u235.gendf").read().splitlines(keepends=True)
+        start = next(i for i, line in enumerate(lines) if line[70:75] == " 3 18")
+        # drop the two lines (header and data) of group 5 of MT18
+        drop = next(i for i in range(start + 1, len(lines)) if lines[i][55:66].strip() == "5")
+        path = tmp_path / "gap.gendf"
+        path.write_text("".join(lines[:drop] + lines[drop + 2 :]))
+        full = gendf["lib"].xs((922350, 18), level=("ZAI", "MT")).to_numpy()
+        gap = CrossSectionMG.from_gendf(str(path), zai=922350)["xs"].xs((922350, 18), level=("ZAI", "MT")).to_numpy()
+        assert gap[4] == 0.0
+        np.testing.assert_array_equal(np.delete(gap, 4), np.delete(full, 4))

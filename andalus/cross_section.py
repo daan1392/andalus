@@ -2,12 +2,14 @@
 and manage multigroup (MG) nuclear data (cross sections, nubar, chi, ...).
 Cross sections inherit from pandas DataFrames with a
 ``(ZAI, MT, E_min_eV, E_max_eV)`` MultiIndex and a single column holding
-the values of one library. They can be read from NJOY ERRORR files via SANDY,
+the values of one library. They can be read from NJOY GROUPR (GENDF) or ERRORR files via SANDY,
 stored in HDF5, and combined with relative sensitivity profiles to estimate
 the effect of a change in nuclear data on a response (e.g. keff).
 """
 
 __all__ = ["CrossSectionMG"]
+
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -18,6 +20,8 @@ INDEX_NAMES = ["ZAI", "MT", "E_min_eV", "E_max_eV"]
 # Offsets used to keep different ENDF files apart in the MT level. They match
 # the convention used by ``Covariance`` (e.g. 35018 is the prompt fission chi).
 _MT_OFFSETS = {"errorr34": 34000, "errorr35": 35000}
+# GROUPR writes mubar as MF3 MT251; it is stored like the ERRORR34 one (34251).
+_GENDF_MT_OFFSETS = {251: 34000}
 
 
 class CrossSectionMG(pd.DataFrame):
@@ -102,13 +106,140 @@ class CrossSectionMG(pd.DataFrame):
         obj.temperature = temperature
         return obj
 
+    @classmethod
+    def from_gendf(
+        cls,
+        path: str,
+        zai: int,
+        mts: list[int] | None = None,
+        temperature: float | None = None,
+        label: str = "xs",
+    ) -> "CrossSectionMG":
+        """
+        Construct a CrossSectionMG from an NJOY GROUPR output (GENDF) file using SANDY.
+
+        Unlike ERRORR, which only writes the reactions it has a covariance for,
+        GROUPR gives the multigroup data of every requested reaction, also for
+        evaluations without any covariance data.
+
+        Parameters
+        ----------
+        path : str
+            Path to the GENDF file, produced with one temperature, one
+            background cross section and Legendre order 0.
+        zai : int
+            Nuclide identifier (ZAI).
+        mts : list of int, optional
+            Filter for specific MT numbers (after offsetting).
+        temperature : float, optional
+            Temperature at which the data was generated.
+        label : str, default "xs"
+            Column name, i.e. the name of the library.
+
+        Returns
+        -------
+        CrossSectionMG
+            Multigroup data with index ``(ZAI, MT, E_min_eV, E_max_eV)``.
+
+        Notes
+        -----
+        MT numbers follow the ERRORR convention of :meth:`from_errorr`: mubar
+        (MF3 MT251) is stored as 34251 and the fission spectrum (MF5 MT18) as
+        35018. Only a fission spectrum given as a single vector is read; an
+        incident-energy dependent chi matrix is skipped with a warning.
+        """
+        gendf = sandy.Gendf.from_file(path)
+        xs = cls._gendf_mf3(gendf)
+        xs = xs.rename(columns={mt: mt + offset for mt, offset in _GENDF_MT_OFFSETS.items()})
+        parts = [cls._xs_to_series(xs)]
+
+        chi = cls._gendf_chi(gendf, n_groups=len(xs))
+        if chi is not None:
+            energies = pd.IntervalIndex(xs.index)
+            index = pd.MultiIndex.from_arrays(
+                [np.full(len(chi), _MT_OFFSETS["errorr35"] + 18), energies.left, energies.right],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            )
+            parts.append(pd.Series(chi, index=index))
+        ser = pd.concat(parts)
+
+        if mts:
+            ser = ser[ser.index.get_level_values("MT").isin(mts)]
+
+        ser = pd.concat({zai: ser}, names=["ZAI"])
+        obj = cls(ser.rename(label).to_frame().sort_index())
+        obj.temperature = temperature
+        return obj
+
+    @staticmethod
+    def _gendf_mf3(gendf: sandy.Gendf) -> pd.DataFrame:
+        """
+        Read the MF3 sections of a GENDF file into a frame with energy intervals as index and MT as columns.
+
+        GROUPR leaves out groups in which a reaction is zero, both below a threshold and in between
+        (e.g. a reaction with a negligible cross section over part of the range). Every record is
+        therefore placed by its own group index, which ``sandy.Gendf.get_xs`` does not do.
+        """
+        from sandy.gendf import read_mf1
+        from sandy.records import read_cont_fast, read_list_fast
+
+        mat = gendf.mat[0]
+        # Boundaries are rounded to 1e-6 eV like in ``Sensitivity`` and ``FluxSpectrum``: GROUPR writes
+        # the lowest one as 1.00001e-5 eV, ERRORR (hence ``Covariance``) and Serpent as 1e-5 eV.
+        breaks = np.round(read_mf1(gendf, mat)["EGN"], decimals=6)
+        energies = pd.IntervalIndex.from_breaks(breaks, name="E")
+        columns = {}
+        for _, mf, mt in gendf.data:
+            if mf != 3:
+                continue
+            records = gendf._get_section_records(mat, mf, mt)
+            head, i = read_cont_fast(records, 0)
+            if head.L1 != 1 or head.L2 != 1:
+                raise ValueError(f"MF3 MT{mt} of MAT {mat} has more than one Legendre order or dilution.")
+            values = np.zeros(len(energies))
+            while i < len(records):
+                rec, i = read_list_fast(records, i)
+                values[rec.N2 - 1] = rec.B[1]  # (flux, value[, cross section for ratio quantities])
+            columns[mt] = values
+        return pd.DataFrame(columns, index=energies)
+
+    @staticmethod
+    def _gendf_chi(gendf: sandy.Gendf, n_groups: int) -> np.ndarray | None:
+        """Return the fission spectrum (MF5 MT18) of a GENDF file as a vector, or None if absent."""
+        from sandy.records import read_cont_fast, read_list_fast
+
+        mat = gendf.mat[0]
+        if (mat, 5, 18) not in gendf.data:
+            return None
+        records = gendf._get_section_records(mat, 5, 18)
+        head, i = read_cont_fast(records, 0)
+        rec, i = read_list_fast(records, i)
+        n_legendre, n_sigz, n_out, lowest = head.L1, head.L2, rec.L1, rec.L2
+        # A single record holding one value per outgoing group is a chi vector; anything else
+        # (more records, Legendre orders or dilutions) is a matrix that cannot be stored per group.
+        if i < len(records) or n_legendre != 1 or n_sigz != 1 or len(rec.B) != n_out:
+            warnings.warn(
+                f"MF5 MT18 of MAT {mat} is not a single fission spectrum vector, chi is not read from the GENDF file.",
+                stacklevel=3,
+            )
+            return None
+        chi = np.zeros(n_groups)
+        chi[lowest - 1 : lowest - 1 + n_out] = rec.B
+        return chi
+
     @staticmethod
     def _errorr_to_series(key: str, errorr: sandy.Errorr) -> pd.Series:
         """Convert a sandy.Errorr object to a Series indexed by (MT, E_min_eV, E_max_eV)."""
         xs = errorr.get_xs().data.droplevel("MAT", axis=1)
+        xs.columns = xs.columns.to_numpy() + _MT_OFFSETS.get(key, 0)
+        return CrossSectionMG._xs_to_series(xs)
+
+    @staticmethod
+    def _xs_to_series(xs: pd.DataFrame) -> pd.Series:
+        """Convert a frame with energy intervals as index and MT as columns to a Series."""
         energies = pd.IntervalIndex(xs.index)
 
-        mts = xs.columns.to_numpy() + _MT_OFFSETS.get(key, 0)
+        mts = xs.columns.to_numpy()
         n_groups = len(xs)
         index = pd.MultiIndex.from_arrays(
             [

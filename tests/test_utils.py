@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -104,3 +105,14 @@ def test_uncertainty_reactionwise(test_assimilatin_suite):
     assert isinstance(result, pd.Series)
     assert result.index.names == ["ZAI_1", "MT_1", "ZAI_2", "MT_2"]
     assert result.sum() != 0
+
+    # Mirrored reaction pairs are collapsed: (ZAI_1, MT_1) <= (ZAI_2, MT_2)
+    idx = result.index.to_frame(index=False)
+    first = list(zip(idx["ZAI_1"], idx["MT_1"], strict=True))
+    second = list(zip(idx["ZAI_2"], idx["MT_2"], strict=True))
+    assert all(a <= b for a, b in zip(first, second, strict=True))
+    assert result.index.is_unique
+
+    # Collapsing preserves the total variance
+    total = sandwich_binwise(benchmark, covariances).sum()
+    assert (np.sign(result) * result**2).sum() == pytest.approx(total)
