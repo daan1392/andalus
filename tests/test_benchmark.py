@@ -660,3 +660,14 @@ def test_from_serpent_rejects_non_keff_kind():
             results_path="data/hmf001.ser_res.m",
             kind="void",
         )
+
+
+def test_filter_logs_removed_benchmarks(test_benchmark, caplog, capsys):
+    import logging
+
+    suite = BenchmarkSuite.from_list([test_benchmark])
+    with caplog.at_level(logging.INFO, logger="andalus.benchmark"):
+        filtered = suite.filter(lambda bm: False)
+    assert len(filtered) == 0
+    assert "Removed benchmarks: HMF001" in caplog.text
+    assert capsys.readouterr().out == ""

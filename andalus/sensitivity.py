@@ -268,19 +268,3 @@ class Sensitivity(pd.DataFrame):
             ax.legend()
 
         return ax
-
-
-if __name__ == "__main__":
-    # Example usage
-    sens = Sensitivity.from_serpent(
-        sens0_path=r"C:\Users\dhouben\Documents\andalus\data\hmf001.ser_sens0.m",
-        title="ExampleSensitivity",
-        kind="keff",
-        materiallist=["total"],
-        pertlist=["mt 18 xs", "mt 102 xs"],
-    )
-    sens.plot_sensitivity(zais=[922380], perts=[18, 102])
-    plt.show()
-    print(sens.index)
-    print(sens.isotopes)
-    # sens.to_hdf5(r"C:\Users\dhouben\Documents\andalus\data\example_sensitivity.h5")

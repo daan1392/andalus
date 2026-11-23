@@ -237,6 +237,16 @@ posterior = suite.glls()
 
 Applications are optional: without them, only the nuclear data and the benchmarks are adjusted.
 
+ANDALUS reports progress (the prior and posterior chi-squared of `glls()`, filtering, ACE export)
+through Python's `logging` module rather than printing it. Warnings, such as a covariance replaced
+by its backup, are shown by default; to also see the progress messages, enable INFO logging:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
+```
+
 Pass `include_sensitivity_uncertainty=True` to account for the statistical uncertainty on the
 sensitivity profiles themselves. For each benchmark the variance
 $\sum_i (\epsilon_i S_i)^2 C_{ii}$ is added to the benchmark covariance, with $\epsilon_i$ the

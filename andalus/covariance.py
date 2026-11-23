@@ -6,6 +6,7 @@ A covariance suite can be assembled from multiple Covariance objects, creating a
 
 __all__ = ["Covariance", "CovarianceSuite"]
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
@@ -14,6 +15,8 @@ import sandy
 import scipy.sparse
 
 from andalus.utils import zam2nuclide
+
+logger = logging.getLogger(__name__)
 
 
 class Covariance(pd.DataFrame):
@@ -197,9 +200,13 @@ class Covariance(pd.DataFrame):
         if obj.is_unrealistic_uncertainty():
             nuclide = zam2nuclide(zai)
             if backup_store is not None and key in backup_store:
-                print(f"Uncertainty for nuclide {nuclide} is too large. Using backup covariance.")
+                logger.warning("Uncertainty for nuclide %s is too large. Using the backup covariance.", nuclide)
                 return cls.from_store(backup_store, zai, mts, backup_store=None)
-            print(f"Uncertainty for nuclide {nuclide} is too large. No backup covariance available.")
+            logger.warning(
+                "Uncertainty for nuclide %s is too large and no backup covariance is available; "
+                "its covariance is left empty.",
+                nuclide,
+            )
             return cls()
         else:
             return obj
@@ -621,25 +628,3 @@ class CovarianceSuite:
             xscale="log",
         )
         return ax
-
-
-if __name__ == "__main__":
-    # covs = {}
-
-    # for zai in [922350, 922380]:
-    #     covs[zai] = Covariance.from_hdf5(
-    #         r"c:\Users\dhouben\OneDrive - Studiecentrum voor Kernenergie\Documents\data\jeff_40\jeff40_ecco33.h5",
-    #         zai=zai,
-    #         mts=[2, 4, 18, 102, 456, 35018],
-    #     )
-    #     print(f"ZAI: {zai}, Nuclide: {covs[zai].nuclide}, Shape: {covs[zai].shape}")
-    #     print(covs[zai])
-    #     covs[zai].to_hdf5("covariances_test.h5")
-
-    # suite = CovarianceSuite.from_dict(covs)
-    # print(suite.matrix)
-    # print(suite.get_uncertainties())
-    # print(suite.get_correlation_matrix())
-
-    cov = Covariance.from_hdf5("data/covariances_test.h5", zai=922380, mts=[18])
-    print(cov.correlation())

@@ -5,6 +5,7 @@ for assimilation purposes.
 
 __all__ = ["AssimilationSuite"]
 
+import logging
 import os
 import warnings
 from dataclasses import dataclass, replace
@@ -18,8 +19,9 @@ from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
 from andalus.cross_section import CrossSectionMG
-from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
 from andalus.utils import delta_response, sandwich, zam2nuclide
+
+logger = logging.getLogger(__name__)
 
 #: Largest difference (K) between the requested temperature and an xsdata entry's temperature.
 _XSDATA_TEMPERATURE_TOLERANCE = 1.0
@@ -734,10 +736,13 @@ class AssimilationSuite:
             raise ValueError("glls() needs at least one benchmark in the assimilation suite.")
         has_applications = self.applications is not None and len(self.applications) > 0
 
-        print("Performing GLLS update on the assimilation suite...")
-        print(f"    Number of benchmarks included in GLLS: {len(self.benchmarks)}")
-        print(f"    Prior chi-squared with nuclear data: {self.chi_squared(nuclear_data=True):.4f}")
-        print(f"    Prior chi-squared without nuclear data: {self.chi_squared(nuclear_data=False):.4f}")
+        logger.info("Performing GLLS update with %d benchmarks", len(self.benchmarks))
+        if logger.isEnabledFor(logging.INFO):  # chi_squared inverts the benchmark covariance
+            logger.info(
+                "Prior chi-squared: %.4f with nuclear data, %.4f without",
+                self.chi_squared(nuclear_data=True),
+                self.chi_squared(nuclear_data=False),
+            )
 
         # Total benchmark covariance: nuclear data + (correlated) measurement + calculation uncertainty
         cov_total = self._benchmark_covariance(nuclear_data=True)
@@ -801,14 +806,16 @@ class AssimilationSuite:
             prior_xs=self.prior_xs,
         )
 
-        print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")
-        print(f"    Posterior chi-squared without nuclear data: {posteriorSuite.chi_squared(nuclear_data=False):.4f}")
+        if logger.isEnabledFor(logging.INFO):  # chi_squared inverts the benchmark covariance
+            logger.info(
+                "Posterior chi-squared: %.4f with nuclear data, %.4f without",
+                posteriorSuite.chi_squared(nuclear_data=True),
+                posteriorSuite.chi_squared(nuclear_data=False),
+            )
         # print(
         #     f"    Calculated bias: {posteriorSuite.applications.c - self.applications.c}"
         #     rf" $\pm$ {prediction_uncertainty:.5f}"
         # )
-        print("")
-
         return posteriorSuite
 
     def individual_chi_squared(self, nuclear_data: bool = False) -> pd.Series:
@@ -970,7 +977,7 @@ class AssimilationSuite:
             return f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
 
         def _process_single_zai(zai: int) -> str | None:
-            print(f"Exporting adjustments for ZAI {zam2nuclide(zai)} to ACE format...")
+            logger.info("Exporting adjustments for %s to ACE format", zam2nuclide(zai))
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
             delta_xs = xs_adjustment.loc[zai] + 1
@@ -1012,7 +1019,7 @@ class AssimilationSuite:
         if only_zais_applications:
             app_zais = set(self.applications.zais) if self.applications else set()
             zais = [zai for zai in zais if zai in app_zais]
-            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+            logger.info("Only exporting ZAIs present in the applications: %d ZAIs", len(zais))
 
         _warn_not_exported(
             xs_adjustment, zais, exported_mts, reason="SANDY only applies MF31, MF33 and MF35 perturbations"
@@ -1095,7 +1102,7 @@ class AssimilationSuite:
             (e.g. 300 -> "03c") and to select the source file from
             `xsdata_path`.
         verbose : bool, default False
-            If True, print progress for each ZAI.
+            If True, log progress for each ZAI (at INFO level).
         only_zais_applications : bool, default False
             If True, only process ZAIs present in the application suite.
         create_xsdata : bool, default False
@@ -1154,7 +1161,7 @@ class AssimilationSuite:
         if only_zais_applications:
             app_zais = set(self.applications.zais) if self.applications else set()
             zais = [zai for zai in zais if zai in app_zais]
-            print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+            logger.info("Only exporting ZAIs present in the applications: %d ZAIs", len(zais))
 
         all_mts = xs_adjustment.index.get_level_values("MT").unique()
         _warn_not_exported(
@@ -1186,7 +1193,7 @@ class AssimilationSuite:
                         "to_ace_direct requires an already-processed ACE file per ZAI."
                     )
             if verbose:
-                print(f"Perturbing ZAI={zai} directly from {in_path}...")
+                logger.info("Perturbing ZAI %d directly from %s", zai, in_path)
 
             ace = ACE.read(in_path)
             delta = xs_adjustment.loc[zai]
@@ -1217,24 +1224,3 @@ class AssimilationSuite:
                 f.write("\n".join(xsdata_lines) + "\n")
 
         return written_paths
-
-
-if __name__ == "__main__":
-    assimilation_suite = AssimilationSuite.from_yaml("data/config.yaml")
-    from andalus.filters import Chi2Filter
-
-    post_suite = (
-        assimilation_suite.filter(Chi2Filter(threshold=1))
-        .filter(Chi2NuclearDataFilter(threshold=1, covariance_matrix=assimilation_suite.covariances.matrix))
-        .glls()
-        .summarize()
-    )
-
-    # print(assimilation_suite.applications.c)
-    # print(posterior_assimilation_suite.applications.c)
-    # assert not np.allclose(assimilation_suite.applications.c, posterior_assimilation_suite.applications.c)
-    # # print(posterior_assimilation_suite.ck_matrix())
-
-    # print(assimilation_suite.chi_squared(nuclear_data=True))
-    # print(assimilation_suite.prior_discrepancy)
-    # print(post_suite.prior_discrepancy)

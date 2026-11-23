@@ -638,33 +638,3 @@ class ApplicationSuite:
         """
         filtered_apps = {title: app for title, app in self.applications.items() if filter_fn(app)}
         return ApplicationSuite(applications=filtered_apps)
-
-
-if __name__ == "__main__":
-    # Example usage
-    app = Application.from_serpent(
-        title="HMF001",
-        results_path="data/hmf001.ser_res.m",
-        sens0_path="data/hmf001.ser_sens0.m",
-        m=1.0000,
-        dm=0.00100,
-    )
-    app2 = Application.from_serpent(
-        title="HMF002-001",
-        results_path="data/hmf002-001.ser_res.m",
-        sens0_path="data/hmf002-001.ser_sens0.m",
-        m=1.0000,
-        dm=0.00300,
-    )
-    app.print_summary()
-
-    app_suite = ApplicationSuite.from_list([app, app2])
-
-    print(app.m, app.dm)
-    print(app2.m, app2.dm)
-
-    print(app_suite.m)
-    # import matplotlib.pyplot as plt
-
-    # app.s.plot_sensitivity(zais=[922380], perts=[2, 4])
-    # plt.show()

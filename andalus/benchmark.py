@@ -4,6 +4,7 @@ which are used to represent and manage benchmark data.
 
 __all__ = ["Benchmark", "BenchmarkSuite"]
 
+import logging
 from dataclasses import dataclass, field, replace
 
 import h5py
@@ -13,6 +14,8 @@ import pandas as pd
 from andalus.sensitivity import Sensitivity
 from andalus.spectrum import FluxSpectrum
 from andalus.utils import _check_kind, read_serpent
+
+logger = logging.getLogger(__name__)
 
 
 def _require_flux(benchmark: "Benchmark") -> FluxSpectrum:
@@ -730,7 +733,7 @@ class BenchmarkSuite:
         )
 
     def filter(self, filter_fn) -> "BenchmarkSuite":
-        """Filter the BenchmarkSuite based on a filter function and print a summary of the benchmarks removed.
+        """Filter the BenchmarkSuite based on a filter function and log the benchmarks removed (at INFO level).
 
         Parameters
         ----------
@@ -743,19 +746,11 @@ class BenchmarkSuite:
         BenchmarkSuite
             A new BenchmarkSuite instance containing only the benchmarks for which `filter_fn` returns True.
         """
-        print(f"Filtering benchmarks using {filter_fn.__class__.__name__}...")
-        print(f"    Initial number of benchmarks: {len(self.benchmarks)}")
+        logger.info("Filtering %d benchmarks using %s", len(self.benchmarks), filter_fn.__class__.__name__)
         filtered_benchmarks = {title: bm for title, bm in self.benchmarks.items() if filter_fn(bm)}
         removed_benchmarks = set(self.benchmarks.keys()) - set(filtered_benchmarks.keys())
         if removed_benchmarks:
-            print(f"    Removed benchmarks: {', '.join(removed_benchmarks)} \n")
+            logger.info("Removed benchmarks: %s", ", ".join(sorted(removed_benchmarks)))
         else:
-            print("    No benchmarks were removed. \n")
+            logger.info("No benchmarks were removed")
         return BenchmarkSuite(benchmarks=filtered_benchmarks, exp_corr=self._corr_for(filtered_benchmarks))
-
-
-if __name__ == "__main__":
-    bmarks = BenchmarkSuite.from_yaml("data/config.yaml")
-    print(bmarks.s)
-    print(bmarks.ds)
-    print(bmarks.titles)

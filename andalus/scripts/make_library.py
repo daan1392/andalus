@@ -55,6 +55,7 @@ Everything the previous libraries contained, on the ECCO-33 grid::
 __all__ = ["zai_from_filename", "njoy_cache_dir", "process_endf6", "remove_zais", "build_library", "main"]
 
 import argparse
+import logging
 import os
 import re
 import traceback
@@ -70,6 +71,8 @@ import tables
 from andalus.covariance import Covariance
 from andalus.cross_section import CrossSectionMG
 from andalus.utils import zam2nuclide
+
+logger = logging.getLogger(__name__)
 
 GENDF = "gendf"  # GROUPR output, the source of the multigroup data
 SECTIONS = (GENDF, "errorr31", "errorr33", "errorr34", "errorr35")
@@ -433,8 +436,9 @@ def build_library(
 
     log_path = os.path.splitext(output)[0] + "_make_library.log"
 
-    def log(message: str):
-        print(message, flush=True)
+    def log(message: str, level: int = logging.INFO):
+        # The log file is always written; the console output goes through logging.
+        logger.log(level, message)
         with open(log_path, "a") as f:
             f.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
 
@@ -467,7 +471,7 @@ def build_library(
     def handle(zai: int, files: dict[str, str] | None, error: str):
         if files is None:
             outcome["failed"].append(zai)
-            log(f"ZAI {zai} FAILED: {error.strip().splitlines()[-1] if error else 'unknown error'}")
+            log(f"ZAI {zai} FAILED: {error.strip().splitlines()[-1] if error else 'unknown error'}", logging.WARNING)
             return
         if not files:
             outcome["no_data"].append(zai)
@@ -488,7 +492,7 @@ def build_library(
                 cov.to_hdf5(output, merge=merge_covariances)
         except Exception as exc:
             outcome["failed"].append(zai)
-            log(f"ZAI {zai} FAILED while writing: {exc!r}")
+            log(f"ZAI {zai} FAILED while writing: {exc!r}", logging.WARNING)
             return
         outcome["written"].append(zai)
         log(f"ZAI {zai} ({_nuclide_name(zai)}): wrote {sorted(files)}")
@@ -534,6 +538,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--remove-zais", nargs="+", type=int, help="delete these ZAIs from the output first")
     args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     outcome = build_library(
         endf6_dir=args.endf6_dir,

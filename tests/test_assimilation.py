@@ -896,3 +896,14 @@ def test_glls_experimental_correlation(assimilation_setup):
     assert post.applications is not None
     assert np.abs(post.applications.c - suite.glls().applications.c).max() > 1e-8
     assert correlated.filter(lambda bm: True).benchmarks.exp_corr == {pair: 0.8}
+
+
+def test_glls_logs_progress_instead_of_printing(assimilation_setup, caplog, capsys):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="andalus.assimilation"):
+        assimilation_setup.glls()
+    messages = [r.getMessage() for r in caplog.records]
+    assert any(m.startswith("Prior chi-squared") for m in messages)
+    assert any(m.startswith("Posterior chi-squared") for m in messages)
+    assert capsys.readouterr().out == ""
