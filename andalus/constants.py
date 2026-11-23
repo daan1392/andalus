@@ -101,8 +101,6 @@ REACTION_LABELS = {
     34252: ("(n,n) P2", "(n,n) $P_2$"),
     34253: ("(n,n) P3", "(n,n) $P_3$"),
     34254: ("(n,n) P4", "(n,n) $P_4$"),
-    35016: ("chi", r"$\chi$"),
-    35017: ("chi delayed", r"$\chi_d$"),
     35018: ("chi prompt", r"$\chi_p$"),
 }
 
