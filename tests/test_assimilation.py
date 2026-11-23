@@ -130,6 +130,39 @@ def test_glls_covariance_shrinkage(assimilation_setup):
     assert np.any(post_unc < prior_unc), "Posterior uncertainty should be strictly smaller than prior."
 
 
+def test_sensitivity_covariance_uses_absolute_errors(assimilation_setup):
+    """The sensitivity term is sum_i (eps_i * S_i)^2 * C_ii per benchmark, with eps the
+    relative statistical error written by Serpent, and it is diagonal across benchmarks."""
+    suite = assimilation_setup
+    cov = suite.covariances.matrix
+
+    v_s = suite._sensitivity_covariance()
+
+    assert list(v_s.index) == suite.benchmarks.titles
+    off_diagonal = v_s.to_numpy() - np.diag(np.diag(v_s.to_numpy()))
+    assert not off_diagonal.any()
+    for title, benchmark in suite.benchmarks.items():
+        s = benchmark.s.iloc[:, 0]
+        rel_err = benchmark.s.iloc[:, 1]
+        idx = s.index.intersection(cov.index)
+        variances = pd.Series(np.diag(cov.to_numpy()), index=cov.index).loc[idx]
+        expected = ((rel_err.loc[idx] * s.loc[idx]) ** 2 * variances).sum()
+        assert v_s.loc[title, title] == pytest.approx(expected, rel=1e-12)
+        assert expected > 0
+
+
+def test_glls_sensitivity_uncertainty_does_not_cancel_adjustment(assimilation_setup):
+    """Regression test: the relative errors used to be summed directly (~1e2 against a total
+    variance of ~1e-4), which shrank the adjustment by about six orders of magnitude."""
+    suite = assimilation_setup
+
+    dx = suite.glls().xs_adjustment
+    dx_ds = suite.glls(include_sensitivity_uncertainty=True).xs_adjustment
+
+    assert np.abs(dx_ds).max() > 0.5 * np.abs(dx).max()
+    np.testing.assert_allclose(dx_ds, dx, rtol=1e-2, atol=1e-6 * np.abs(dx).max())
+
+
 def test_titles_property_with_empty_benchmarks():
     """Test the titles property when benchmarks is None."""
     from andalus.application import ApplicationSuite

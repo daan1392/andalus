@@ -613,10 +613,41 @@ class AssimilationSuite:
             cov = cov + sandwich(self.benchmarks.s, self.covariances.matrix, self.benchmarks.s)
         return cov
 
+    def _sensitivity_covariance(self) -> pd.DataFrame:
+        r"""Variance of the benchmark responses caused by the statistical uncertainty of the sensitivities.
+
+        .. math::
+            V_{S,jj} = \sum_i \left(\epsilon_{ij} S_{ij}\right)^2 C_{ii}
+
+        where :math:`\epsilon_{ij}` is the relative statistical error of sensitivity
+        :math:`S_{ij}` (as written by Serpent and stored in ``ds``) and :math:`C_{ii}` the
+        relative nuclear data variance of bin :math:`i`. The Monte Carlo noise is
+        independent between bins and between benchmarks, so only the diagonal of
+        :math:`C` enters and the result is diagonal. Bins without covariance data
+        contribute zero.
+
+        Returns
+        -------
+        pd.DataFrame
+            Diagonal matrix indexed by benchmark title.
+        """
+        cov = self.covariances.matrix
+        s = self.benchmarks.s.reindex(cov.index, fill_value=0.0).to_numpy()
+        rel_err = self.benchmarks.ds.reindex(cov.index, fill_value=0.0).to_numpy()
+        var = ((rel_err * s) ** 2 * np.diag(cov.to_numpy())[:, None]).sum(axis=0)
+        titles = self.benchmarks.titles
+        return pd.DataFrame(np.diag(var), index=titles, columns=titles)
+
     def glls(self, include_sensitivity_uncertainty: bool = False) -> "AssimilationSuite":
         """Perform a GLLS update [1] on the assimilation suite using the sensitivity
         profiles and covariance data loaded in the AssimilationSuite. This method updates
         the calculated response and the covariance matrices.
+
+        Parameters
+        ----------
+        include_sensitivity_uncertainty : bool, default False
+            Add the variance caused by the statistical uncertainty of the Monte Carlo
+            sensitivities to the benchmark covariance, see :meth:`_sensitivity_covariance`.
 
         Returns
         -------
@@ -642,19 +673,8 @@ class AssimilationSuite:
         # Total benchmark covariance: nuclear data + (correlated) measurement + calculation uncertainty
         cov_total = self._benchmark_covariance(nuclear_data=True)
 
-        # Propagate the uncertainty on the sensitivity profiles (ds already stored in relative units)
-        cov_ds = (
-            pd.DataFrame(
-                np.diag(((self.benchmarks.ds.values) ** 2).sum(axis=0)),
-                self.benchmarks.s.columns,
-                self.benchmarks.s.columns,
-            )
-            if include_sensitivity_uncertainty
-            else None
-        )
-
-        if include_sensitivity_uncertainty and cov_ds is not None:
-            cov_total = cov_total + cov_ds
+        if include_sensitivity_uncertainty:
+            cov_total = cov_total + self._sensitivity_covariance()
 
         # Inverse (pseudo-inverse) of total covariance
         C_inv = pd.DataFrame(
