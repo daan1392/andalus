@@ -2,9 +2,136 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import sandy.zam
 import serpentTools
 
+from andalus.constants import REACTION_LABELS
 from andalus.cross_section import CrossSectionMG
+
+
+def zam2nuclide(zam, atomic_number=False, sep=""):
+    """
+    Convert a ZAM (ZAI) identifier to a nuclide name such as ``"U235"``.
+
+    Thin wrapper around :func:`sandy.zam.zam2nuclide`.
+
+    Parameters
+    ----------
+    zam : int
+        Nuclide identifier ``Z * 10000 + A * 10 + M``.
+    atomic_number : bool, optional
+        Prefix the atomic number. Default is ``False``.
+    sep : str, optional
+        Separator between atomic number, element symbol and mass number.
+        Default is ``""``.
+
+    Returns
+    -------
+    str
+        Nuclide name with symbol and mass number, metastable states
+        suffixed with ``m``/``n``.
+
+    Examples
+    --------
+    >>> zam2nuclide(922350)
+    'U235'
+    >>> zam2nuclide(952421)
+    'Am242m'
+    >>> zam2nuclide(922350, atomic_number=True, sep="-")
+    '92-U-235'
+    """
+    return sandy.zam.zam2nuclide(int(zam), atomic_number=atomic_number, sep=sep)
+
+
+def zam2latex(zam):
+    """
+    Convert a ZAM (ZAI) identifier to a LaTeX nuclide label such as ``"$^{235}$U"``.
+
+    Thin wrapper around :func:`sandy.zam.zam2latex`, intended for matplotlib
+    labels.
+
+    Parameters
+    ----------
+    zam : int
+        Nuclide identifier ``Z * 10000 + A * 10 + M``.
+
+    Returns
+    -------
+    str
+        LaTeX string with the mass number as superscript, metastable states
+        marked with ``m``/``n``.
+
+    Examples
+    --------
+    >>> zam2latex(922350)
+    '$^{235}$U'
+    >>> zam2latex(952421)
+    '$^{242m}$Am'
+    """
+    return sandy.zam.zam2latex(int(zam))
+
+
+def mt2reaction(mt):
+    """
+    Convert an MT number to a plain-text reaction label such as ``"(n,f)"``.
+
+    Parameters
+    ----------
+    mt : int
+        ENDF MT number (or ANDALUS pseudo-MT, e.g. 34251 for mubar and
+        35018 for the prompt fission spectrum).
+
+    Returns
+    -------
+    str
+        Reaction label, or ``"MT{mt}"`` if the MT number is unknown.
+
+    See Also
+    --------
+    mt2latex : LaTeX version, intended for plot labels.
+
+    Examples
+    --------
+    >>> mt2reaction(2)
+    '(n,n)'
+    >>> mt2reaction(4)
+    "(n,n')"
+    >>> mt2reaction(102)
+    '(n,gamma)'
+    """
+    mt = int(mt)
+    return REACTION_LABELS[mt][0] if mt in REACTION_LABELS else f"MT{mt}"
+
+
+def mt2latex(mt):
+    r"""
+    Convert an MT number to a LaTeX reaction label such as ``"(n,$\gamma$)"``.
+
+    Parameters
+    ----------
+    mt : int
+        ENDF MT number (or ANDALUS pseudo-MT, e.g. 34251 for mubar and
+        35018 for the prompt fission spectrum).
+
+    Returns
+    -------
+    str
+        LaTeX reaction label for matplotlib, or ``"MT{mt}"`` if the MT
+        number is unknown.
+
+    See Also
+    --------
+    mt2reaction : Plain-text version.
+
+    Examples
+    --------
+    >>> mt2latex(102)
+    '(n,$\\gamma$)'
+    >>> mt2latex(452)
+    '$\\bar{\\nu}$'
+    """
+    mt = int(mt)
+    return REACTION_LABELS[mt][1] if mt in REACTION_LABELS else f"MT{mt}"
 
 
 def read_serpent(path):

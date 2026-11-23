@@ -1,6 +1,6 @@
 """Tests for the constants module."""
 
-from andalus.constants import MT_TRANSLATION, PERT_LABELS, get_mt_number
+from andalus.constants import MT_TRANSLATION, REACTION_LABELS, get_mt_number
 
 
 def test_mt_translation_dict():
@@ -14,15 +14,11 @@ def test_mt_translation_dict():
     assert MT_TRANSLATION["nubar total"] == 452
 
 
-def test_pert_labels_dict():
-    """Test that PERT_LABELS dictionary is properly defined."""
-    assert isinstance(PERT_LABELS, dict)
-    assert len(PERT_LABELS) > 0
-    # Test some known values
-    assert PERT_LABELS[1] == "(n,tot.)"
-    assert PERT_LABELS[18] == "(n,fission)"
-    assert PERT_LABELS[102] == "(n,gamma)"
-    assert PERT_LABELS[452] == "nubar total"
+def test_reaction_labels_cover_mt_translation():
+    """Every MT that Serpent sensitivities can produce has a reaction label."""
+    assert set(MT_TRANSLATION.values()) <= set(REACTION_LABELS)
+    for plain, latex in REACTION_LABELS.values():
+        assert isinstance(plain, str) and isinstance(latex, str)
 
 
 def test_get_mt_number_known_label():

@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 import sandy
 import scipy.sparse
-from sandy.zam import zam2nuclide
+
+from andalus.utils import zam2nuclide
 
 
 class Covariance(pd.DataFrame):

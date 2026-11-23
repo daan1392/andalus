@@ -64,6 +64,7 @@ import tables
 
 from andalus.covariance import Covariance
 from andalus.cross_section import CrossSectionMG
+from andalus.utils import zam2nuclide
 
 GENDF = "gendf"  # GROUPR output, the source of the multigroup data
 SECTIONS = (GENDF, "errorr31", "errorr33", "errorr34", "errorr35")
@@ -123,7 +124,7 @@ def _parse_name(filename: str) -> int | None:
 def _nuclide_name(zai: int) -> str:
     """Name of a nuclide for the log, e.g. ``U235``; the free neutron (Z = 0) has no element symbol."""
     try:
-        return sandy.zam.zam2nuclide(zai)
+        return zam2nuclide(zai)
     except KeyError:
         return "n" if zai == 10 else "?"
 

@@ -18,7 +18,7 @@ from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
 from andalus.cross_section import CrossSectionMG
 from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
-from andalus.utils import delta_response, sandwich
+from andalus.utils import delta_response, sandwich, zam2nuclide
 
 
 def _parse_xsdata(path: str) -> dict[int, str]:
@@ -821,7 +821,7 @@ class AssimilationSuite:
             return f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
 
         def _process_single_zai(zai: int) -> str | None:
-            print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
+            print(f"Exporting adjustments for ZAI {zam2nuclide(zai)} to ACE format...")
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
             delta_xs = xs_adjustment.loc[zai] + 1
