@@ -126,7 +126,7 @@ class Benchmark:
         if materials is None:
             materials = ["total"]
         if pertlist is None:
-            pertlist = ["mt 2 xs", "mt 4 xs", "mt 18 xs", "mt 102 xs", "nubar prompt", "chi prompt"]
+            pertlist = ["mt 2 xs", "mt 4 xs", "mt 18 xs", "mt 102 xs", "nubar prompt", "ela leg mom 1", "chi prompt"]
 
         results = read_serpent(results_path)
         c = results.resdata["absKeff"][0]

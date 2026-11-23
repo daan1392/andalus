@@ -1,7 +1,16 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from andalus.utils import sandwich, sandwich_binwise, uncertainty_reactionwise
+from andalus.utils import (
+    mt2latex,
+    mt2reaction,
+    sandwich,
+    sandwich_binwise,
+    uncertainty_reactionwise,
+    zam2latex,
+    zam2nuclide,
+)
 
 
 @pytest.fixture
@@ -104,3 +113,72 @@ def test_uncertainty_reactionwise(test_assimilatin_suite):
     assert isinstance(result, pd.Series)
     assert result.index.names == ["ZAI_1", "MT_1", "ZAI_2", "MT_2"]
     assert result.sum() != 0
+
+    # Mirrored reaction pairs are collapsed: (ZAI_1, MT_1) <= (ZAI_2, MT_2)
+    idx = result.index.to_frame(index=False)
+    first = list(zip(idx["ZAI_1"], idx["MT_1"], strict=True))
+    second = list(zip(idx["ZAI_2"], idx["MT_2"], strict=True))
+    assert all(a <= b for a, b in zip(first, second, strict=True))
+    assert result.index.is_unique
+
+    # Collapsing preserves the total variance
+    total = sandwich_binwise(benchmark, covariances).sum()
+    assert (np.sign(result) * result**2).sum() == pytest.approx(total)
+
+
+class TestZamConversion:
+    @pytest.mark.parametrize(
+        ("zam", "kwargs", "expected"),
+        [
+            (922350, {}, "U235"),
+            (952421, {}, "Am242m"),
+            (952422, {}, "Am242n"),
+            (922350, {"atomic_number": True}, "92U235"),
+            (922350, {"atomic_number": True, "sep": "-"}, "92-U-235"),
+            (np.int64(260560), {}, "Fe56"),
+        ],
+    )
+    def test_zam2nuclide(self, zam, kwargs, expected):
+        assert zam2nuclide(zam, **kwargs) == expected
+
+    @pytest.mark.parametrize(
+        ("zam", "expected"),
+        [(922350, "$^{235}$U"), (952421, "$^{242m}$Am"), (np.int64(10010), "$^{1}$H")],
+    )
+    def test_zam2latex(self, zam, expected):
+        assert zam2latex(zam) == expected
+
+    def test_exported_at_top_level(self):
+        import andalus
+
+        assert andalus.zam2nuclide is zam2nuclide
+        assert andalus.zam2latex is zam2latex
+
+
+class TestMtConversion:
+    @pytest.mark.parametrize(
+        ("mt", "plain", "latex"),
+        [
+            (2, "(n,n)", "(n,n)"),
+            (4, "(n,n')", "(n,n')"),
+            (18, "(n,f)", "(n,f)"),
+            (51, "(n,n'1)", "(n,n'$_{1}$)"),
+            (102, "(n,gamma)", r"(n,$\gamma$)"),
+            (452, "nubar", r"$\bar{\nu}$"),
+            (34251, "mubar", r"$\bar{\mu}$"),
+            (np.int64(35018), "chi prompt", r"$\chi_p$"),
+        ],
+    )
+    def test_known_mt(self, mt, plain, latex):
+        assert mt2reaction(mt) == plain
+        assert mt2latex(mt) == latex
+
+    def test_unknown_mt(self):
+        assert mt2reaction(999) == "MT999"
+        assert mt2latex(999) == "MT999"
+
+    def test_exported_at_top_level(self):
+        import andalus
+
+        assert andalus.mt2reaction is mt2reaction
+        assert andalus.mt2latex is mt2latex

@@ -16,8 +16,9 @@ from andalus.ace.core import CHI_MF, NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
+from andalus.cross_section import CrossSectionMG
 from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
-from andalus.utils import sandwich
+from andalus.utils import delta_response, sandwich, zam2nuclide
 
 
 def _parse_xsdata(path: str) -> dict[int, str]:
@@ -71,8 +72,13 @@ class AssimilationSuite:
     covariances: CovarianceSuite
     xs_adjustment: pd.Series | None = None
     prior_c: pd.Series | None = None
+    xs: CrossSectionMG | None = None
+    prior_xs: CrossSectionMG | None = None
 
     def __post_init__(self):
+        # Like prior_c: the xs a suite is created with is the prior the sensitivities were generated with.
+        if self.prior_xs is None:
+            self.prior_xs = self.xs
         if self.benchmarks is not None or self.applications is not None:
             if self.prior_c is None:
                 self.prior_c = self.c
@@ -217,15 +223,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        # Do not concatenate if there are only benchmarks or applications.
-        if self.benchmarks is None and self.applications:
-            return self.applications.s
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.s
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.s, self.applications.s], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.s)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.s)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def ds(self):
@@ -247,14 +256,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.ds
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.ds
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.ds, self.applications.ds], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.ds)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.ds)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def flux(self):
@@ -276,15 +289,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        # Do not concatenate if there are only benchmarks or applications.
-        if self.benchmarks is None and self.applications:
-            return self.applications.flux
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.flux
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.flux, self.applications.flux], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.flux)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.flux)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def dflux(self):
@@ -306,14 +322,18 @@ class AssimilationSuite:
         ValueError
             If both `benchmarks` and `applications` are None or empty.
         """
-        if self.benchmarks is None and self.applications:
-            return self.applications.dflux
-        elif self.applications is None and self.benchmarks:
-            return self.benchmarks.dflux
-        elif self.benchmarks and self.applications:
-            return pd.concat([self.benchmarks.dflux, self.applications.dflux], axis=1).fillna(0.0)
-        else:
+        parts = []
+        if self.benchmarks is not None and len(self.benchmarks) > 0:
+            parts.append(self.benchmarks.dflux)
+        if self.applications is not None and len(self.applications) > 0:
+            parts.append(self.applications.dflux)
+
+        if not parts:
             raise ValueError("No applications or benchmarks in the assimilation suite.")
+
+        if len(parts) == 1:
+            return parts[0]
+        return pd.concat(parts, axis=1).fillna(0.0)
 
     @property
     def is_posterior(self) -> bool:
@@ -371,6 +391,8 @@ class AssimilationSuite:
         AssimilationSuite
             An instance of AssimilationSuite populated with data from the YAML file.
         """
+        import yaml
+
         # Load benchmark and application data from the YAML file
         benchmarks = BenchmarkSuite.from_yaml(path)
         applications = ApplicationSuite.from_yaml(path)
@@ -382,9 +404,42 @@ class AssimilationSuite:
         if applications:
             zais_set.update(applications.zais)
         zais_list = sorted(list(zais_set))
-        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=[2, 4, 18, 102, 456, 35018])
+        mts = [2, 4, 18, 102, 456, 34251, 35018]
+        covariances = CovarianceSuite.from_yaml(path, zais=zais_list, mts=mts)
 
-        return cls(benchmarks=benchmarks, applications=applications, covariances=covariances)
+        xs = None
+        with open(path) as f:
+            xs_config = yaml.safe_load(f).get("cross_sections")
+        if xs_config:
+            xs = CrossSectionMG.from_hdf5(xs_config["file_path"], zais=zais_list, mts=mts)
+
+        return cls(benchmarks=benchmarks, applications=applications, covariances=covariances, xs=xs)
+
+    def delta_response(self, xs_other, by: str | list[str] | None = None) -> pd.Series | pd.DataFrame:
+        r"""Relative first-order change of every case's response (e.g. keff) when
+        the prior multigroup data ``self.prior_xs`` is replaced by ``xs_other``.
+
+        ``self.prior_xs`` is the library the sensitivities ``self.s`` were generated
+        with. For a posterior suite, ``suite.delta_response(suite.xs)`` gives the
+        first-order effect of the adjustment. See :func:`andalus.utils.delta_response`.
+
+        Parameters
+        ----------
+        xs_other : CrossSectionMG
+            Multigroup data to switch to.
+        by : None, str or list of str, default None
+            Index levels to keep, from ``"ZAI"``, ``"MT"``, ``"E_min_eV"`` and ``"E_max_eV"``,
+            e.g. ``["ZAI", "MT"]`` for the contribution per reaction. ``None`` gives the total
+            per case. See :func:`andalus.utils.delta_response`.
+
+        Returns
+        -------
+        pd.Series or pd.DataFrame
+            Relative response change per case.
+        """
+        if self.prior_xs is None:
+            raise ValueError("No multigroup cross sections (`xs`) in the assimilation suite.")
+        return delta_response(self.prior_xs, self.s, xs_other, by=by)
 
     def flux_sim_matrix(self) -> pd.DataFrame:
         r"""Generate a similarity matrix based on the flux for the assimilation suite.
@@ -492,6 +547,8 @@ class AssimilationSuite:
             covariances=self.covariances,
             xs_adjustment=self.xs_adjustment,
             prior_c=self.prior_c,
+            xs=self.xs,
+            prior_xs=self.prior_xs,
         )
 
     def _benchmark_covariance(self, nuclear_data: bool = True) -> pd.DataFrame:
@@ -605,6 +662,8 @@ class AssimilationSuite:
             covariances=CovarianceSuite.from_df(Vx_post),
             xs_adjustment=dx,
             prior_c=self.prior_c,
+            xs=self.xs.adjusted(dx) if self.xs is not None else None,
+            prior_xs=self.prior_xs,
         )
 
         print(f"    Posterior chi-squared with nuclear data: {posteriorSuite.chi_squared(nuclear_data=True):.4f}")
@@ -762,7 +821,7 @@ class AssimilationSuite:
             return f"  {filename} {filename} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {pert_filename}"
 
         def _process_single_zai(zai: int) -> str | None:
-            print(f"Exporting adjustments for ZAI {sandy.zam.zam2nuclide(zai)} to ACE format...")
+            print(f"Exporting adjustments for ZAI {zam2nuclide(zai)} to ACE format...")
             # Extract the adjustments for the current ZAI
             # Add 1 to convert from relative adjustment to multiplicative factor!
             delta_xs = xs_adjustment.loc[zai] + 1

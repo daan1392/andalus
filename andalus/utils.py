@@ -2,7 +2,136 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import sandy.zam
 import serpentTools
+
+from andalus.constants import REACTION_LABELS
+from andalus.cross_section import CrossSectionMG
+
+
+def zam2nuclide(zam, atomic_number=False, sep=""):
+    """
+    Convert a ZAM (ZAI) identifier to a nuclide name such as ``"U235"``.
+
+    Thin wrapper around :func:`sandy.zam.zam2nuclide`.
+
+    Parameters
+    ----------
+    zam : int
+        Nuclide identifier ``Z * 10000 + A * 10 + M``.
+    atomic_number : bool, optional
+        Prefix the atomic number. Default is ``False``.
+    sep : str, optional
+        Separator between atomic number, element symbol and mass number.
+        Default is ``""``.
+
+    Returns
+    -------
+    str
+        Nuclide name with symbol and mass number, metastable states
+        suffixed with ``m``/``n``.
+
+    Examples
+    --------
+    >>> zam2nuclide(922350)
+    'U235'
+    >>> zam2nuclide(952421)
+    'Am242m'
+    >>> zam2nuclide(922350, atomic_number=True, sep="-")
+    '92-U-235'
+    """
+    return sandy.zam.zam2nuclide(int(zam), atomic_number=atomic_number, sep=sep)
+
+
+def zam2latex(zam):
+    """
+    Convert a ZAM (ZAI) identifier to a LaTeX nuclide label such as ``"$^{235}$U"``.
+
+    Thin wrapper around :func:`sandy.zam.zam2latex`, intended for matplotlib
+    labels.
+
+    Parameters
+    ----------
+    zam : int
+        Nuclide identifier ``Z * 10000 + A * 10 + M``.
+
+    Returns
+    -------
+    str
+        LaTeX string with the mass number as superscript, metastable states
+        marked with ``m``/``n``.
+
+    Examples
+    --------
+    >>> zam2latex(922350)
+    '$^{235}$U'
+    >>> zam2latex(952421)
+    '$^{242m}$Am'
+    """
+    return sandy.zam.zam2latex(int(zam))
+
+
+def mt2reaction(mt):
+    """
+    Convert an MT number to a plain-text reaction label such as ``"(n,f)"``.
+
+    Parameters
+    ----------
+    mt : int
+        ENDF MT number (or ANDALUS pseudo-MT, e.g. 34251 for mubar and
+        35018 for the prompt fission spectrum).
+
+    Returns
+    -------
+    str
+        Reaction label, or ``"MT{mt}"`` if the MT number is unknown.
+
+    See Also
+    --------
+    mt2latex : LaTeX version, intended for plot labels.
+
+    Examples
+    --------
+    >>> mt2reaction(2)
+    '(n,n)'
+    >>> mt2reaction(4)
+    "(n,n')"
+    >>> mt2reaction(102)
+    '(n,gamma)'
+    """
+    mt = int(mt)
+    return REACTION_LABELS[mt][0] if mt in REACTION_LABELS else f"MT{mt}"
+
+
+def mt2latex(mt):
+    r"""
+    Convert an MT number to a LaTeX reaction label such as ``"(n,$\gamma$)"``.
+
+    Parameters
+    ----------
+    mt : int
+        ENDF MT number (or ANDALUS pseudo-MT, e.g. 34251 for mubar and
+        35018 for the prompt fission spectrum).
+
+    Returns
+    -------
+    str
+        LaTeX reaction label for matplotlib, or ``"MT{mt}"`` if the MT
+        number is unknown.
+
+    See Also
+    --------
+    mt2reaction : Plain-text version.
+
+    Examples
+    --------
+    >>> mt2latex(102)
+    '(n,$\\gamma$)'
+    >>> mt2latex(452)
+    '$\\bar{\\nu}$'
+    """
+    mt = int(mt)
+    return REACTION_LABELS[mt][1] if mt in REACTION_LABELS else f"MT{mt}"
 
 
 def read_serpent(path):
@@ -112,12 +241,139 @@ def uncertainty_reactionwise(s1, cov, s2=None):
     -------
     pd.Series
         A Series with a MultiIndex (ZAI_1, MT_1, ZAI_2, MT_2) representing the
-        uncertainty contribution of each reaction.
+        uncertainty contribution of each reaction, sorted by absolute value.
+
+    Notes
+    -----
+    The two mirrored off-diagonal blocks of a reaction pair, e.g.
+    (942390, 18, 942390, 102) and (942390, 102, 942390, 18), are summed into
+    a single entry with (ZAI_1, MT_1) <= (ZAI_2, MT_2). The variances
+    (signed squares of the returned values) therefore still add up to the
+    total variance ``sandwich(s1, cov, s2)``.
     """
-    variances = sandwich_binwise(s1, cov, s2).groupby(["ZAI_1", "MT_1", "ZAI_2", "MT_2"]).sum()
+    levels = ["ZAI_1", "MT_1", "ZAI_2", "MT_2"]
+    variances = sandwich_binwise(s1, cov, s2).groupby(levels).sum()
+
+    # Collapse mirrored pairs (a, b) and (b, a): order each pair so that
+    # (ZAI_1, MT_1) <= (ZAI_2, MT_2), then sum the variances.
+    idx = variances.index.to_frame(index=False)
+    swap = (idx["ZAI_1"] > idx["ZAI_2"]) | ((idx["ZAI_1"] == idx["ZAI_2"]) & (idx["MT_1"] > idx["MT_2"]))
+    idx.loc[swap, levels] = idx.loc[swap, ["ZAI_2", "MT_2", "ZAI_1", "MT_1"]].to_numpy()
+    variances.index = pd.MultiIndex.from_frame(idx)
+    variances = variances.groupby(levels).sum()
 
     uncertainties = np.sign(variances) * np.sqrt(np.abs(variances))
 
     sorted_uncertainties = uncertainties.sort_values(ascending=False, key=abs)
 
     return sorted_uncertainties
+
+
+def _warn_uncovered(s, covered, max_listed=10):
+    """Warn about bins of ``s`` with a non-zero sensitivity that are not in ``covered``."""
+    uncovered = s.loc[s.index.difference(covered)]
+    uncovered = uncovered[(uncovered != 0).any(axis=1)]
+    if uncovered.empty:
+        return
+    summary = (
+        uncovered.abs()
+        .max(axis=1)
+        .groupby(level=["ZAI", "MT"])
+        .agg(["size", "max"])
+        .sort_values("max", ascending=False)
+    )
+    listed = ", ".join(
+        f"ZAI {zai} MT {mt} ({int(row['size'])} bins, max |S| = {row['max']:.3g})"
+        for (zai, mt), row in summary.head(max_listed).iterrows()
+    )
+    extra = f" and {len(summary) - max_listed} more" if len(summary) > max_listed else ""
+    warnings.warn(
+        f"{len(uncovered)} sensitivity bins with non-zero sensitivity have no cross section data "
+        f"and contribute zero to the response change: {listed}{extra}.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
+_LEVELS = ("ZAI", "MT", "E_min_eV", "E_max_eV")
+_ENERGY_LEVELS = ("E_min_eV", "E_max_eV")
+
+
+def _by_levels(by):
+    """Translate the ``by`` argument of ``delta_response`` to a list of index level names (or None)."""
+    if by is None:
+        return None
+    if not isinstance(by, str | list | tuple):
+        raise ValueError(f"`by` must be None, a level name or a list of level names, not {type(by).__name__}.")
+    lookup = {name.lower(): name for name in _LEVELS} | {"nuclide": "ZAI"}
+    levels = []
+    for item in [by] if isinstance(by, str) else list(by):
+        name = lookup.get(item.lower()) if isinstance(item, str) else None
+        if name is None:
+            raise ValueError(f"Invalid `by` entry {item!r}. Use None or a list of {list(_LEVELS)}.")
+        if name not in levels:
+            levels.append(name)
+    if not levels:
+        raise ValueError("`by` must be None or contain at least one level name.")
+    # an energy bin is identified by both of its edges
+    if set(levels) & set(_ENERGY_LEVELS):
+        levels += [name for name in _ENERGY_LEVELS if name not in levels]
+    return levels
+
+
+def delta_response(xs_ref, s, xs_other, by=None):
+    r"""
+    First-order relative change of responses when replacing ``xs_ref`` by ``xs_other``.
+
+    .. math::
+        \frac{\Delta R}{R} = \sum_i S_i \, \frac{\sigma^{other}_i - \sigma^{ref}_i}{\sigma^{ref}_i}
+
+    Sensitivities are relative, so the cross section difference is divided by the
+    reference library, which must be the one used to compute ``s``. Bins with a
+    zero reference cross section and sensitivity bins without cross section data
+    contribute zero.
+
+    Parameters
+    ----------
+    xs_ref : CrossSectionMG
+        Reference multigroup data, the library ``s`` was generated with.
+    s : pd.DataFrame
+        Sensitivities with index ``(ZAI, MT, E_min_eV, E_max_eV)``, one column per case.
+    xs_other : CrossSectionMG
+        Multigroup data to switch to.
+    by : None, str or list of str, default None
+        Index levels to keep in the result, from ``"ZAI"``, ``"MT"``, ``"E_min_eV"`` and
+        ``"E_max_eV"`` (case-insensitive). The contributions are summed over the levels that are
+        not listed. ``None`` gives the total per case. For example ``["ZAI"]`` gives the
+        contribution per nuclide, ``["ZAI", "MT"]`` per reaction and ``["ZAI", "MT", "E_min_eV"]``
+        per energy bin. Listing one energy edge adds the other, since both identify a bin.
+
+    Returns
+    -------
+    pd.Series or pd.DataFrame
+        Relative response change per case (Series), or a DataFrame with one column per case
+        and the requested levels as index. The contributions add up to the total.
+
+    Raises
+    ------
+    ValueError
+        If ``by`` is invalid, or if the sensitivity and cross section bins do not overlap.
+
+    Warns
+    -----
+    UserWarning
+        If sensitivity bins with a non-zero value have no cross section data.
+    """
+    levels = _by_levels(by)
+    rel = CrossSectionMG(pd.DataFrame(xs_other)).relative_difference(xs_ref)
+    s = pd.DataFrame(s)
+    if s.index.intersection(rel.index).empty:
+        raise ValueError(
+            "No sensitivity bins match the cross section bins. Check that the ERRORR energy "
+            "grid equals the sensitivity energy grid."
+        )
+    _warn_uncovered(s, rel.index)
+    contrib = s.reindex(rel.index, fill_value=0.0).mul(rel, axis=0)
+    if levels is not None:
+        return contrib.groupby(level=levels).sum()
+    return contrib.sum(axis=0).rename("delta_response")

@@ -5,6 +5,9 @@ covariances:
   # Optional: backup covariance file path to use if uncertainties in the primary file are unrealistic
   # backup: "../data/covariances_backup.h5"
 
+cross_sections:
+  file_path: "xs_u235.h5"
+
 # List of benchmarks to be loaded into the BenchmarkSuite
 benchmarks:
   - title: "HMF001"

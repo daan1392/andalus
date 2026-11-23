@@ -142,7 +142,24 @@ covariances:
 
 `AssimilationSuite.from_yaml()` automatically determines which nuclides (ZAIs) to load from the
 union of all ZAIs present in the benchmark and application sensitivities.  The reactions loaded are
-currently fixed to MT 2, 4, 18, 102, 456, and 35018.
+currently fixed to MT 2, 4, 18, 102, 456, 34251, and 35018.
+
+---
+
+## `cross_sections` section (optional)
+
+Points to an HDF5 file with multigroup cross sections (produced via `CrossSectionMG.to_hdf5()`,
+which can be the same file as the covariances). They are available as `suite.xs`.
+
+```yaml
+cross_sections:
+  file_path: data/covariances.h5
+```
+
+Sensitivities are relative, so library differences must be relative to the library the
+sensitivities were computed with: `suite.delta_response(other_xs)` evaluates
+`S^T (xs_other - xs) / xs`, with `suite.prior_xs` as the reference. After `glls()`, `suite.xs` is the
+posterior, `suite.prior_xs` the prior and `suite.xs_adjustment` the relative adjustment between them.
 
 ---
 

@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 import sandy
 import scipy.sparse
-from sandy.zam import zam2nuclide
+
+from andalus.utils import zam2nuclide
 
 
 class Covariance(pd.DataFrame):
@@ -106,7 +107,9 @@ class Covariance(pd.DataFrame):
             A DataFrame containing the covariance data with a
             (MT, E_min_eV, E_max_eV) MultiIndex.
         """
-        cov = errorr.get_cov().data
+        # The chi covariance (errorr35) is stored as a lower triangle, which SANDY's symmetry check
+        # rejects. It is symmetrized below, so the check is only skipped for this section.
+        cov = errorr.get_cov(covariance_checks=key != "errorr35").data
 
         def transform_index(idx: pd.MultiIndex) -> pd.MultiIndex:
             """Helper to transform the index levels and names."""
@@ -302,7 +305,38 @@ class Covariance(pd.DataFrame):
 
         return full_matrix.toarray(), final_index
 
-    def to_hdf5(self, file_path: str):
+    def _merged_with_stored(self, file_path: str) -> "Covariance":
+        """
+        Combine with the covariance stored for this ZAI in an HDF5 file.
+
+        Stored rows and columns of the MT numbers present in this object are replaced. All
+        other stored entries are kept, and the correlations between the stored and the
+        new MT numbers are zero (a block-diagonal addition). The "unrealistic uncertainty"
+        check of :meth:`from_store` is not applied.
+        """
+        zai_str = str(self.zai)
+        key = f"zai_{zai_str}/covariances/data"
+        with pd.HDFStore(file_path, mode="a") as store:
+            if key not in store:
+                return self
+            attrs = store.get_storer(key).attrs
+            index = self._reconstruct_index(store, zai_str, attrs)
+            matrix, stored_index = self._assemble_matrix(store[key], index, attrs.shape, None)
+
+        stored_index = stored_index.set_names(self.index.names)
+        old = pd.DataFrame(matrix, index=stored_index, columns=stored_index)
+        keep = ~stored_index.get_level_values("MT").isin(self.index.get_level_values("MT"))
+        old = old.loc[keep, keep]
+
+        combined = pd.concat([old, pd.DataFrame(self)]).fillna(0.0)
+        combined = combined.reindex(columns=combined.index)
+        merged = Covariance(combined)
+        merged.zai = self.zai
+        merged.temperature = getattr(self, "temperature", None)
+        merged.err = getattr(self, "err", None)
+        return merged
+
+    def to_hdf5(self, file_path: str, merge: bool = False):
         """
         Save the matrix to HDF5 using sparse lower-triangular storage.
 
@@ -310,7 +344,14 @@ class Covariance(pd.DataFrame):
         ----------
         file_path : str
             Path to save the HDF5 file.
+        merge : bool, default False
+            What to do when a covariance is already stored for this ZAI. If False, it is
+            replaced. If True, the stored covariance is kept and only the MT numbers present
+            in this object are replaced or added, with zero correlation to the other MT
+            numbers (for example to add the Legendre moment block, MT 34251, to a library).
         """
+        if merge:
+            self = self._merged_with_stored(file_path)
         zai_str = str(self.zai)
         rows, cols = np.tril_indices(len(self))
         data = self.values[rows, cols]
@@ -337,6 +378,7 @@ class Covariance(pd.DataFrame):
             attrs.is_multiindex = True
             attrs.zai = self.zai
             attrs.temperature = getattr(self, "temperature", None)
+            attrs.err = getattr(self, "err", None)
 
     def correlation(self) -> pd.DataFrame:
         """
@@ -357,6 +399,8 @@ class Covariance(pd.DataFrame):
 
     def is_unrealistic_uncertainty(self, threshold=10):
         """Check if diagonal elements (variances) exceed a threshold."""
+        if self.empty:
+            return False
         return np.diag(self.values).max() > threshold
 
 

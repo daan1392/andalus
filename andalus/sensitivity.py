@@ -10,10 +10,9 @@ from itertools import product
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sandy.zam import zam2latex
 
-from andalus.constants import MT_TRANSLATION, PERT_LABELS
-from andalus.utils import read_serpent
+from andalus.constants import MT_TRANSLATION
+from andalus.utils import mt2latex, read_serpent, zam2latex
 
 
 class Sensitivity(pd.DataFrame):
@@ -256,7 +255,7 @@ class Sensitivity(pd.DataFrame):
                 e_max,
                 val,
                 where="pre",
-                label=f"{zam2latex(zai)} {PERT_LABELS.get(pert, pert)}" if "label" not in kwargs else None,
+                label=f"{zam2latex(zai)} {mt2latex(pert)}" if "label" not in kwargs else None,
                 **kwargs,
             )
 
