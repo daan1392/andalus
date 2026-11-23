@@ -1,8 +1,10 @@
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from andalus.assimilation import AssimilationSuite, _parse_xsdata
+from andalus.assimilation import AssimilationSuite, _find_xsdata_entry, _parse_xsdata
 
 
 @pytest.fixture
@@ -492,7 +494,66 @@ def test_parse_xsdata_maps_za_to_path(tmp_path):
 
     libraries = _parse_xsdata(str(xsdata_path))
 
-    assert libraries == {92234: str(ace_path.resolve())}
+    assert libraries == {922340: {300.0: str(ace_path.resolve())}}
+
+
+def test_parse_xsdata_temperatures_isomers_types_and_spaces(tmp_path):
+    """Entries are keyed by ZAI (isomer-aware) and temperature, only transport entries
+    (type 1) are kept, and quoted paths may contain spaces."""
+    spaced = tmp_path / "dir with spaces"
+    spaced.mkdir()
+    xsdata_path = tmp_path / "lib.xsdata"
+    xsdata_path.write_text(
+        "  92235.03c 92235.03c 1 92235 0 235.044 300 0 u235_300.ace\n"
+        "  U-235.03c 92235.03c 1 92235 0 235.044 300 0 u235_alias.ace\n"
+        "  92235.06c 92235.06c 1 92235 0 235.044 600 0 u235_600.ace\n"
+        "  95242.03c 95242.03c 1 95242 0 242.059 300 0 am242.ace\n"
+        "  95342.03c 95342.03c 1 95242 1 242.059 300 0 am242m.ace\n"
+        "  92235.dos 92235.dos 2 92235 0 235.044 300 0 u235_dosimetry.ace\n"
+        f'  1001.03c 1001.03c 1 1001 0 1.0 300 0 "{spaced / "h 1.ace"}"\n'
+    )
+
+    libraries = _parse_xsdata(str(xsdata_path))
+
+    def name(zai, t):
+        return os.path.basename(libraries[zai][t])
+
+    assert set(libraries[922350]) == {300.0, 600.0}
+    assert name(922350, 300.0) == "u235_300.ace"  # first alias wins, dosimetry entry ignored
+    assert name(922350, 600.0) == "u235_600.ace"
+    assert name(952420, 300.0) == "am242.ace"
+    assert name(952421, 300.0) == "am242m.ace"
+    assert libraries[10010][300.0] == str((spaced / "h 1.ace").resolve())
+
+
+def test_find_xsdata_entry_selects_temperature(tmp_path):
+    for name in ("u235_300.ace", "u235_600.ace"):
+        (tmp_path / name).write_text("")
+    libraries = {922350: {293.6: str(tmp_path / "u235_300.ace"), 600.0: str(tmp_path / "u235_600.ace")}}
+
+    assert _find_xsdata_entry(libraries, 922350, 600, "lib.xsdata").endswith("u235_600.ace")
+    assert _find_xsdata_entry(libraries, 922350, 293.6, "lib.xsdata").endswith("u235_300.ace")
+    with pytest.raises(FileNotFoundError, match=r"at 300 K .*available for this nuclide: 293.6, 600 K"):
+        _find_xsdata_entry(libraries, 922350, 300, "lib.xsdata")
+    with pytest.raises(FileNotFoundError, match="available for this nuclide: none"):
+        _find_xsdata_entry(libraries, 922351, 600, "lib.xsdata")
+
+
+def test_to_ace_direct_xsdata_wrong_temperature_raises(assimilation_setup, tmp_path):
+    """Regression test: the first xsdata entry of a nuclide used to be taken whatever its
+    temperature, so a 300 K file was perturbed and written out as a 600 K one."""
+    import shutil
+
+    suite = assimilation_setup
+    shutil.copy("data/1-H-1g-300.0", tmp_path / "1001.03c")
+    xsdata_path = tmp_path / "lib.xsdata"
+    xsdata_path.write_text(f"  1001.03c 1001.03c 1 1001 0 1.0 300 0 {tmp_path / '1001.03c'}\n")
+    suite.xs_adjustment = pd.Series(
+        [0.1], index=pd.MultiIndex.from_tuples([(10010, 102, 1.0, 2.0)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"])
+    )
+
+    with pytest.raises(FileNotFoundError, match=r"ZAI=10010 at 600 K"):
+        suite.to_ace_direct(out_dir=str(tmp_path / "out"), xsdata_path=str(xsdata_path), temperature=600)
 
 
 def test_to_ace_direct_no_posterior(assimilation_setup):

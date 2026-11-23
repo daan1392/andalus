@@ -235,8 +235,13 @@ suite.s  # sensitivity matrix (rows = cases, cols = nuclear data)
 posterior = suite.glls()
 ```
 
+Applications are optional: without them, only the nuclear data and the benchmarks are adjusted.
+
 Pass `include_sensitivity_uncertainty=True` to account for the statistical uncertainty on the
-sensitivity profiles themselves (not yet tested):
+sensitivity profiles themselves. For each benchmark the variance
+$\sum_i (\epsilon_i S_i)^2 C_{ii}$ is added to the benchmark covariance, with $\epsilon_i$ the
+relative statistical error of sensitivity $S_i$ written by Serpent and $C_{ii}$ the nuclear data
+variance of bin $i$ (the Monte Carlo noise is independent between bins and benchmarks):
 
 ```python
 posterior = suite.glls(include_sensitivity_uncertainty=True)
@@ -291,7 +296,9 @@ Monte Carlo codes. Two methods are available; `to_ace_direct` is the recommended
 `andalus.ace.ACE.perturb`/`perturb_nu`/`perturb_chi`), taking a fraction of a second per nuclide.
 It does not talk to ENDF or run NJOY, instead only an ASCII ACE file per adjusted ZAI is needed.
 Point it at either a directory of ACE files named by ZAID (`ace_dir`) or a Serpent-style xsdata
-file for libraries with non-standard naming, such as JEFF-4.0 (`xsdata_path`):
+file for libraries with non-standard naming, such as JEFF-4.0 (`xsdata_path`). From the xsdata
+file, the transport entry with the nuclide's ZA, isomeric state and a temperature within 1 K of
+`temperature` is used; if there is none, the error lists the temperatures that are available:
 
 ```python
 posterior.to_ace_direct(
@@ -314,6 +321,10 @@ posterior.to_ace(
     parallel=True,
 )
 ```
+
+Mubar (MT 34251) adjustments cannot be exported by either method: `to_ace_direct` does not
+perturb the ACE angular distributions and SANDY ignores MF34 perturbations. Both methods leave
+them out with a `UserWarning` naming the affected nuclides; the other adjustments are exported.
 
 Both methods accept `only_zais_applications=True` to limit the export to nuclides that actually
 appear in the application sensitivities. If you do not possess of sensitivities while they are available in your application, but you did not calculate them. The calculated response and the predicted response using linear approximations could be different.

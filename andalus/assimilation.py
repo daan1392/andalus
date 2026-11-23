@@ -21,19 +21,25 @@ from andalus.cross_section import CrossSectionMG
 from andalus.filters import Chi2Filter, Chi2NuclearDataFilter
 from andalus.utils import delta_response, sandwich, zam2nuclide
 
+#: Largest difference (K) between the requested temperature and an xsdata entry's temperature.
+_XSDATA_TEMPERATURE_TOLERANCE = 1.0
 
-def _parse_xsdata(path: str) -> dict[int, str]:
-    """Map ZA to source ACE file path from a Serpent xsdata file.
+
+def _parse_xsdata(path: str) -> dict[int, dict[float, str]]:
+    """Map ZAI and temperature to source ACE file path from a Serpent xsdata file.
 
     Adapted from `endf.ace.get_libraries_from_xsdata
     <https://github.com/paulromano/endf-python/blob/main/src/endf/ace.py>`_
-    by Paul Romano, keyed by ZA (word[3]) instead of returning an ordered
-    list, so it can be looked up per ZAI. Each line's fields are ``alias,
-    filename, type, ZA, isomeric_state, awr, temperature, binary_flag,
-    path`` (the same order :meth:`AssimilationSuite.to_ace_direct` writes
-    via its own ``create_xsdata`` option); the path field may be
-    double-quoted (e.g. when it contains spaces), so surrounding quotes
-    are stripped before resolving it.
+    by Paul Romano, keyed by ZAI and temperature instead of returning an
+    ordered list, so it can be looked up per ZAI. Each line's fields are
+    ``alias, filename, type, ZA, isomeric_state, awr, temperature,
+    binary_flag, path`` (the same order :meth:`AssimilationSuite.to_ace_direct`
+    writes via its own ``create_xsdata`` option). Only continuous-energy
+    transport entries (type 1) are kept, so thermal scattering, dosimetry or
+    decay entries are never picked as a source file. The path may be
+    double-quoted (e.g. when it contains spaces); relative paths are resolved
+    against the xsdata file's directory. When several aliases point to the
+    same ZAI and temperature, the first one is kept.
 
     Parameters
     ----------
@@ -42,23 +48,56 @@ def _parse_xsdata(path: str) -> dict[int, str]:
 
     Returns
     -------
-    dict[int, str]
-        Mapping of ZA (``ZAI // 10``) to the resolved absolute path of the
-        corresponding ACE file.
+    dict[int, dict[float, str]]
+        Mapping of ZAI (``ZA * 10 + isomeric_state``) to a mapping of
+        temperature (K) to the resolved absolute path of the ACE file.
     """
+    import shlex
     from pathlib import Path
 
     xsdata = Path(path)
-    libraries = {}
+    libraries: dict[int, dict[float, str]] = {}
     with open(xsdata) as xsdata_file:
         for line in xsdata_file:
-            words = line.split()
-            if len(words) >= 9:
-                za = int(float(words[3]))
-                lib = (xsdata.parent / words[8].strip('"')).resolve()
-                if za not in libraries:
-                    libraries[za] = str(lib)
+            try:
+                # Non-POSIX mode keeps quoted paths with spaces together and leaves backslashes alone.
+                words = shlex.split(line, posix=False)
+            except ValueError:  # unbalanced quote
+                words = line.split()
+            if len(words) < 9 or words[2] != "1":
+                continue
+            zai = int(float(words[3])) * 10 + int(words[4])
+            temperature = float(words[6])
+            lib = (xsdata.parent / words[8].strip('"')).resolve()
+            libraries.setdefault(zai, {}).setdefault(temperature, str(lib))
     return libraries
+
+
+def _find_xsdata_entry(libraries: dict[int, dict[float, str]], zai: int, temperature: float, xsdata_path: str) -> str:
+    """Return the source ACE path for ``zai`` at ``temperature`` from :func:`_parse_xsdata` output.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the xsdata file has no transport entry for ``zai`` within
+        ``_XSDATA_TEMPERATURE_TOLERANCE`` of ``temperature``, or the file it
+        points to does not exist.
+    """
+    entries = libraries.get(int(zai), {})
+    matches = {t: p for t, p in entries.items() if abs(t - temperature) <= _XSDATA_TEMPERATURE_TOLERANCE}
+    if not matches:
+        available = ", ".join(f"{t:g}" for t in sorted(entries)) or "none"
+        raise FileNotFoundError(
+            f"No source ACE file found for ZAI={zai} at {temperature:g} K in xsdata file '{xsdata_path}' "
+            f"(temperatures available for this nuclide: {available} K). "
+            "to_ace_direct requires an already-processed ACE file per ZAI."
+        )
+    in_path = matches[min(matches, key=lambda t: abs(t - temperature))]
+    if not os.path.exists(in_path):
+        raise FileNotFoundError(
+            f"Source ACE file '{in_path}' for ZAI={zai} listed in xsdata file '{xsdata_path}' does not exist."
+        )
+    return in_path
 
 
 def _is_legendre_mt(mt: int) -> bool:
@@ -1013,10 +1052,13 @@ class AssimilationSuite:
             Path to a Serpent-style xsdata file mapping ZAIDs to source ACE
             file paths (relative paths are resolved against the xsdata file's
             directory), allowing source libraries with arbitrary file naming.
-            Mutually exclusive with `ace_dir`.
+            The transport entry (type 1) with the same ZA, isomeric state and
+            a temperature within 1 K of `temperature` is used. Mutually
+            exclusive with `ace_dir`.
         temperature : int, default 300
             Temperature in Kelvin, used to build the ACE filename suffix
-            (e.g. 300 -> "03c").
+            (e.g. 300 -> "03c") and to select the source file from
+            `xsdata_path`.
         verbose : bool, default False
             If True, print progress for each ZAI.
         only_zais_applications : bool, default False
@@ -1037,7 +1079,8 @@ class AssimilationSuite:
             been calculated, or if `ace_dir`/`xsdata_path` are not given
             exactly one at a time.
         FileNotFoundError
-            If the source ACE file for a ZAI cannot be located.
+            If the source ACE file for a ZAI cannot be located, e.g. when
+            `xsdata_path` has no entry for it at `temperature`.
 
         Warns
         -----
@@ -1095,12 +1138,8 @@ class AssimilationSuite:
         for zai in zais:
             filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
             if xsdata_map is not None:
-                in_path = xsdata_map.get(int(zai // 10))
-                if in_path is None or not os.path.exists(in_path):
-                    raise FileNotFoundError(
-                        f"No source ACE file found for ZAI={zai} in xsdata file '{xsdata_path}'. "
-                        "to_ace_direct requires an already-processed ACE file per ZAI."
-                    )
+                assert xsdata_path is not None
+                in_path = _find_xsdata_entry(xsdata_map, zai, temperature, xsdata_path)
             else:
                 assert ace_dir is not None
                 in_path = os.path.join(ace_dir, filename)
