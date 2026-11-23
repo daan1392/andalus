@@ -554,6 +554,41 @@ def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_pat
         np.testing.assert_allclose(result_table.pdf, expected, rtol=1e-6)
 
 
+def test_to_ace_direct_skips_mubar_with_warning(assimilation_setup, tmp_path):
+    """Mubar (MT 34251) used to be routed to ACE.perturb, which raised a KeyError. It must
+    be skipped with a warning while the other adjustments of the nuclide are applied."""
+    import shutil
+
+    from andalus.ace import ACE
+
+    suite = assimilation_setup
+
+    ace_dir = tmp_path / "ace"
+    ace_dir.mkdir()
+    shutil.copy("data/92235.03c", ace_dir / "92235.03c")
+
+    source = ACE.read("data/92235.03c")
+    energy = source.reactions[18].energies
+    e_lo, e_hi = float(energy[10]) * 1e6, float(energy[50]) * 1e6
+    suite.xs_adjustment = pd.Series(
+        [0.2, 0.05],
+        index=pd.MultiIndex.from_tuples(
+            [(922350, 18, e_lo, e_hi), (922350, 34251, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]
+        ),
+    )
+
+    with pytest.warns(UserWarning, match=r"MT 34251 \(U235\)"):
+        written = suite.to_ace_direct(ace_dir=str(ace_dir), out_dir=str(tmp_path / "out"))
+
+    result = ACE.read(written[0])
+    in_bin = (energy * 1e6 > e_lo) & (energy * 1e6 <= e_hi)
+    ratio = result.reactions[18].xs / source.reactions[18].xs
+    np.testing.assert_allclose(ratio[in_bin], 1.2, rtol=1e-10)
+    np.testing.assert_allclose(ratio[~in_bin], 1.0, rtol=1e-10)
+    # Only the fission cross section and the totals it flows into changed
+    np.testing.assert_array_equal(result.reactions[2].xs, source.reactions[2].xs)
+
+
 def _flux_suite(fluxes, apps=()):
     """Build an AssimilationSuite whose cases carry the given flux vectors.
 
