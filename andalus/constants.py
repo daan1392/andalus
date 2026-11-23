@@ -57,8 +57,6 @@ MT_TRANSLATION = {
     "nubar total": (452),  # total neutron multiplicity
     "nubar delayed": (455),  # delayed neutron multiplicity
     "nubar prompt": (456),  # prompt neutron multiplicity
-    "chi total": (35016),  # total fission neutron spectrum
-    "chi delayed": (35017),  # delayed fission neutron spectrum
     "chi prompt": (35018),  # prompt fission neutron spectrum
     "ela leg mom 1": (34251),  # elastic scattering Legendre moment 1
     "ela leg mom 2": (34252),  # elastic scattering Legendre moment 2
