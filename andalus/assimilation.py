@@ -444,7 +444,8 @@ class AssimilationSuite:
         Returns
         -------
         pd.Series
-            A Series containing the prior discrepancy for each benchmark in the suite.
+            A Series containing the prior discrepancy ``(C - E) / E`` for each benchmark
+            in the suite. It is ``inf`` (or ``NaN``) for a measured value ``E`` of zero.
         """
         if self.benchmarks is not None:
             return (self.prior_c - self.m) / self.m
@@ -590,10 +591,13 @@ class AssimilationSuite:
         pd.DataFrame
             A dataframe containing the similarity coefficients between
             all benchmarks and applications in the AssimilationSuite.
+            Entries are ``NaN`` for a case whose nuclear data variance
+            ``S^T C S`` is zero (e.g. no sensitivity to any covaried data).
         """
         cov = sandwich(self.s, self.covariances.matrix, self.s)
-        var = np.diag(cov)
-        return cov.div(np.sqrt(var), axis=0).div(np.sqrt(var), axis=1)
+        std = np.sqrt(np.diag(cov.values))
+        std_safe = np.where(std == 0.0, np.nan, std)
+        return cov.div(std_safe, axis=0).div(std_safe, axis=1)
 
     def ck_target(self, target: str) -> pd.Series:
         """Calculate the ck-similarity of all sensitivities in the suite with a

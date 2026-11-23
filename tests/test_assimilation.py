@@ -1,4 +1,5 @@
 import os
+from unittest.mock import PropertyMock, patch
 
 import numpy as np
 import pandas as pd
@@ -44,6 +45,18 @@ def test_ck_matrix(assimilation_setup):
     assert ck.shape == (3, 3)
     assert "HMF001" in ck.index
     assert "HMF002-002" in ck.index
+
+
+def test_ck_matrix_zero_variance_is_nan(assimilation_setup):
+    """A case without nuclear data variance (no sensitivity to covaried data) gives NaN, not inf."""
+    suite = assimilation_setup
+    s = suite.s.copy()
+    s["HMF001"] = 0.0
+    with patch.object(type(suite), "s", new_callable=PropertyMock, return_value=s):
+        ck = suite.ck_matrix()
+    assert ck.loc["HMF001"].isna().all() and ck["HMF001"].isna().all()
+    others = [t for t in ck.index if t != "HMF001"]
+    assert np.allclose(np.diag(ck.loc[others, others]), 1.0)
 
 
 def test_ck_target_missing_error(assimilation_setup):

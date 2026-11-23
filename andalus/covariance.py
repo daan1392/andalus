@@ -258,13 +258,13 @@ class Covariance(pd.DataFrame):
         # Build the index
         idx = pd.MultiIndex.from_arrays(index_levels)
 
-        # If the stored names are generic (level_0) or missing,
-        # force them to our standard to prevent 'MT not found' errors.
-        standard_names = ["MT", "E_min", "E_max"]
+        # The stored names may be generic (level_0), missing or outdated, so use the names
+        # from_errorr, Sensitivity and CrossSectionMG use.
+        standard_names = ["MT", "E_min_eV", "E_max_eV"]
         if len(index_levels) == 3:
             idx.names = standard_names
         else:
-            # Fallback for 4-level suites (ZAI, MT, E_min, E_max)
+            # Fallback for 4-level suites (ZAI, MT, E_min_eV, E_max_eV)
             idx.names = ["ZAI"] + standard_names[: len(index_levels) - 1]
 
         return idx
@@ -415,8 +415,8 @@ class CovarianceSuite:
     Parameters
     ----------
     matrix : pd.DataFrame
-        The unified global covariance matrix with a 5-level MultiIndex:
-        (ZAI, MF, MT, E_min, E_max).
+        The unified global covariance matrix with a 4-level MultiIndex
+        ``(ZAI, MT, E_min_eV, E_max_eV)`` on both rows and columns.
     """
 
     matrix: pd.DataFrame

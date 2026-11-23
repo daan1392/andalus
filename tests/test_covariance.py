@@ -11,7 +11,7 @@ from andalus.covariance import Covariance, CovarianceSuite
 def sample_cov():
     """Create a dummy symmetric covariance matrix."""
     # only four index entries to match the 4×4 data array
-    idx = pd.MultiIndex.from_product([[18], [1.0, 10.0], [10.0, 100.0]], names=["MT", "E_min", "E_max"])
+    idx = pd.MultiIndex.from_product([[18], [1.0, 10.0], [10.0, 100.0]], names=["MT", "E_min_eV", "E_max_eV"])
     # Create a 4x4 symmetric matrix
     data = np.array([[1.0, 0.2, 0.0, 0.0], [0.2, 1.0, 0.0, 0.0], [0.0, 0.0, 0.5, 0.1], [0.0, 0.0, 0.1, 0.5]])
     cov = Covariance(data, index=idx, columns=idx)
@@ -242,3 +242,18 @@ class TestMergeToHdf5:
         Covariance.from_errorr(self.FILES33, zai=922350).to_hdf5(path)
         Covariance.from_errorr(self.FILES34, zai=922350).to_hdf5(path)
         assert Covariance.from_hdf5(path, zai=922350).shape == (33, 33)
+
+
+def test_from_hdf5_uses_standard_level_names(tmp_path):
+    """from_hdf5 used to name the levels (MT, E_min, E_max), unlike from_errorr and the
+    sensitivities, which use (MT, E_min_eV, E_max_eV)."""
+    names = ["MT", "E_min_eV", "E_max_eV"]
+    stored = Covariance.from_hdf5(os.path.join("data", "covariances_test.h5"), zai=922350)
+    assert list(stored.index.names) == names and list(stored.columns.names) == names
+
+    cov = Covariance.from_errorr({"errorr33": os.path.join("data", "u235.errorr33")}, zai=922350, mts=[18])
+    assert list(cov.index.names) == names
+    path = str(tmp_path / "cov.h5")
+    cov.to_hdf5(path)
+    back = Covariance.from_hdf5(path, zai=922350)
+    assert list(back.index.names) == names and list(back.columns.names) == names
