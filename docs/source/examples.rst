@@ -12,3 +12,4 @@ Explore these Jupyter Notebooks to see the package in action.
    _collections/examples/flux_spectrum_and_e_index
    _collections/examples/ace_perturbation
    _collections/examples/post_to_ace_direct
+   _collections/examples/cross_section_mg
