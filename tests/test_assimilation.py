@@ -130,6 +130,39 @@ def test_glls_covariance_shrinkage(assimilation_setup):
     assert np.any(post_unc < prior_unc), "Posterior uncertainty should be strictly smaller than prior."
 
 
+@pytest.mark.parametrize("applications", [None, "empty"])
+def test_glls_without_applications(assimilation_setup, applications):
+    """Adjusting on benchmarks only must work, and give the same nuclear data adjustment
+    as with applications (they do not enter the update)."""
+    from andalus.application import ApplicationSuite
+
+    suite = assimilation_setup
+    bench_only = AssimilationSuite(
+        benchmarks=suite.benchmarks,
+        applications=ApplicationSuite({}) if applications == "empty" else None,
+        covariances=suite.covariances,
+    )
+
+    post = bench_only.glls()
+
+    pd.testing.assert_series_equal(post.xs_adjustment, suite.glls().xs_adjustment)
+    assert post.chi_squared(nuclear_data=True) < bench_only.chi_squared(nuclear_data=True)
+    assert (post.applications is None) == (applications is None)
+    assert post.titles == suite.benchmarks.titles
+
+
+def test_glls_without_benchmarks_raises(assimilation_setup):
+    from andalus.benchmark import BenchmarkSuite
+
+    suite = assimilation_setup
+    no_bench = AssimilationSuite(
+        benchmarks=BenchmarkSuite({}), applications=suite.applications, covariances=suite.covariances
+    )
+
+    with pytest.raises(ValueError, match="at least one benchmark"):
+        no_bench.glls()
+
+
 def test_sensitivity_covariance_uses_absolute_errors(assimilation_setup):
     """The sensitivity term is sum_i (eps_i * S_i)^2 * C_ii per benchmark, with eps the
     relative statistical error written by Serpent, and it is diagonal across benchmarks."""
@@ -223,7 +256,7 @@ def test_c_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
 
     c = suite.c
     assert isinstance(c, pd.Series)
@@ -260,7 +293,7 @@ def test_dc_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
 
     dc = suite.dc
     assert isinstance(dc, pd.Series)
@@ -297,7 +330,7 @@ def test_s_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
 
     s = suite.s
     assert isinstance(s, pd.DataFrame)
@@ -334,7 +367,7 @@ def test_ds_property_only_benchmarks():
     benchmarks = BenchmarkSuite.from_yaml("data/config.yaml")
     covariances = AssimilationSuite.from_yaml("data/config.yaml").covariances
 
-    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)  # type: ignore
+    suite = AssimilationSuite(benchmarks=benchmarks, applications=None, covariances=covariances)
 
     ds = suite.ds
     assert isinstance(ds, pd.DataFrame)
@@ -656,7 +689,7 @@ def _flux_suite(fluxes, apps=()):
     }
     return AssimilationSuite(
         benchmarks=BenchmarkSuite(benchmarks) if benchmarks else None,  # ty: ignore[invalid-argument-type]
-        applications=ApplicationSuite(applications) if applications else None,  # ty: ignore[invalid-argument-type]
+        applications=ApplicationSuite(applications) if applications else None,
         covariances=None,  # ty: ignore[invalid-argument-type]
     )
 
@@ -731,5 +764,6 @@ def test_glls_experimental_correlation(assimilation_setup):
 
     post = correlated.glls()
     assert post.benchmarks.exp_corr == {pair: 0.8}
+    assert post.applications is not None
     assert np.abs(post.applications.c - suite.glls().applications.c).max() > 1e-8
     assert correlated.filter(lambda bm: True).benchmarks.exp_corr == {pair: 0.8}

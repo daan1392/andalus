@@ -105,7 +105,7 @@ class AssimilationSuite:
     """
 
     benchmarks: BenchmarkSuite
-    applications: ApplicationSuite
+    applications: ApplicationSuite | None
     covariances: CovarianceSuite
     xs_adjustment: pd.Series | None = None
     prior_c: pd.Series | None = None
@@ -652,7 +652,14 @@ class AssimilationSuite:
         Returns
         -------
         AssimilationSuite
-            A new AssimilationSuite instance with updated sensitivity profiles.
+            A new AssimilationSuite instance with updated calculated values. Applications
+            are optional: without them, only the nuclear data and the benchmarks are
+            adjusted and the posterior keeps the (empty) applications of this suite.
+
+        Raises
+        ------
+        ValueError
+            If the suite contains no benchmarks.
 
         References
         ----------
@@ -662,13 +669,14 @@ class AssimilationSuite:
          doi: 10.13182/NSE03-2.
 
         """
+        if self.benchmarks is None or len(self.benchmarks) == 0:
+            raise ValueError("glls() needs at least one benchmark in the assimilation suite.")
+        has_applications = self.applications is not None and len(self.applications) > 0
+
         print("Performing GLLS update on the assimilation suite...")
-        print(f"    Number of benchmarks included in GLLS: {len(self.benchmarks) if self.benchmarks else 0}")
+        print(f"    Number of benchmarks included in GLLS: {len(self.benchmarks)}")
         print(f"    Prior chi-squared with nuclear data: {self.chi_squared(nuclear_data=True):.4f}")
         print(f"    Prior chi-squared without nuclear data: {self.chi_squared(nuclear_data=False):.4f}")
-
-        if self.applications is None or self.benchmarks is None:
-            raise ValueError("glls() cannot be called: applications or benchmarks are not initialized.")
 
         # Total benchmark covariance: nuclear data + (correlated) measurement + calculation uncertainty
         cov_total = self._benchmark_covariance(nuclear_data=True)
@@ -696,10 +704,6 @@ class AssimilationSuite:
 
         c_ = self.benchmarks.c + s_full.T @ dx.loc[idx] * self.benchmarks.c
 
-        idx_a = self.applications.s.index.intersection(idx)
-        c_a = self.applications.c + self.applications.s.loc[idx_a].T @ dx.loc[idx_a] * self.applications.c
-        # Vc_post = self.benchmarks.s.loc[idx].T @ Vx_post.loc[idx, idx] @ self.benchmarks.s.loc[idx]
-
         # Initialize new benchmarkSuite with updated calculation values
         # TODO: Possiblity to add a PosteriorSuite which contains posterior nuclear data and biases.
         post_bench = {}
@@ -707,15 +711,18 @@ class AssimilationSuite:
             bm_ = replace(bm, c=c_.loc[title])
             post_bench[title] = bm_
 
-        # Initialize new applicationSuite with updated calculated values
-        post_app = {}
-        for title, app in self.applications.items():
-            app_ = replace(app, c=c_a.loc[title])
-            post_app[title] = app_
+        # Applications are optional: without them only the nuclear data and benchmarks are adjusted.
+        post_applications = self.applications
+        if has_applications:
+            idx_a = self.applications.s.index.intersection(idx)
+            c_a = self.applications.c + self.applications.s.loc[idx_a].T @ dx.loc[idx_a] * self.applications.c
+            post_applications = ApplicationSuite(
+                {title: replace(app, c=c_a.loc[title]) for title, app in self.applications.items()}
+            )
 
         posteriorSuite = AssimilationSuite(
             benchmarks=BenchmarkSuite(post_bench, exp_corr=self.benchmarks.exp_corr),
-            applications=ApplicationSuite(post_app),
+            applications=post_applications,
             covariances=CovarianceSuite.from_df(Vx_post),
             xs_adjustment=dx,
             prior_c=self.prior_c,
