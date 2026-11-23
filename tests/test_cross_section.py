@@ -264,6 +264,25 @@ class TestSuiteAssimilation:
         s_c = s235.loc[922350].reindex(dx.index, fill_value=0.0)
         np.testing.assert_allclose(dk, s_c.T @ dx, atol=1e-12)
 
+    def test_chained_glls_adjustment_is_cumulative(self, suites, xs):
+        """A second GLLS step used to store only its own adjustment (relative to the first
+        posterior), so prior_xs * (1 + xs_adjustment) lost the first step and the ACE
+        export, which applies xs_adjustment to the prior data, dropped it."""
+        _, post = suites
+        post2 = post.glls()
+        pd.testing.assert_frame_equal(pd.DataFrame(post2.prior_xs), pd.DataFrame(xs))
+
+        common = post2.xs_adjustment.index.intersection(xs.index)
+        prior = xs.loc[common, "lib"]
+        nonzero = prior != 0
+        # Twice-adjusted data == original prior * (1 + cumulative adjustment)
+        np.testing.assert_allclose(
+            post2.xs.loc[common, "posterior"][nonzero],
+            prior[nonzero] * (1.0 + post2.xs_adjustment.loc[common][nonzero]),
+        )
+        # and the second step really changed the data (else the check above is trivial)
+        assert not np.allclose(post2.xs.loc[common, "posterior"], post.xs.loc[common, "posterior"])
+
     def test_filter_keeps_prior_xs(self, suites):
         _, post = suites
         from andalus import Chi2Filter

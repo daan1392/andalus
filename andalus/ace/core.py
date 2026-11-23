@@ -133,15 +133,35 @@ def _apply_bin_adjustment(values: np.ndarray, energies: np.ndarray, bins: pd.Ser
     return delta
 
 
-def _renormalize_and_rebuild_cdf(pdf: np.ndarray, energy_out: np.ndarray, cdf: np.ndarray) -> None:
+#: Interpolation laws of LAW=4 tables that :meth:`ACE.perturb_chi` supports.
+_HISTOGRAM, _LIN_LIN = 1, 2
+
+
+def _pdf_increments(pdf: np.ndarray, energy_out: np.ndarray, intt: int) -> np.ndarray:
+    """Probability in each outgoing-energy interval ``[E_i, E_{i+1}]`` of a LAW=4 table.
+
+    A histogram (``intt=1``) holds ``pdf[i]`` constant over the interval; a
+    lin-lin table (``intt=2``) interpolates linearly, so its interval
+    probability is the trapezoid.
+    """
+    widths = np.diff(energy_out)
+    if intt == _HISTOGRAM:
+        return widths * pdf[:-1]
+    return widths * (pdf[:-1] + pdf[1:]) / 2.0
+
+
+def _renormalize_and_rebuild_cdf(pdf: np.ndarray, energy_out: np.ndarray, cdf: np.ndarray, intt: int) -> None:
     """Renormalize ``pdf`` to unit area and rebuild ``cdf`` in place.
 
-    Both are updated in place via trapezoidal integration, matching the
-    ``CDF[0] = 0`` convention the reader observed in real ACE files.
+    The integral follows the table's interpolation law (histogram or
+    lin-lin, see :func:`_pdf_increments`), so the CDF is consistent with
+    the PDF, with the ``CDF[0] = 0`` convention the reader observed in real
+    ACE files.
     """
-    pdf /= np.trapz(pdf, energy_out)
-    increments = np.diff(energy_out) * (pdf[:-1] + pdf[1:]) / 2.0
-    cdf[:] = np.concatenate(([0.0], np.cumsum(increments)))
+    increments = _pdf_increments(pdf, energy_out, intt)
+    area = increments.sum()
+    pdf /= area
+    cdf[:] = np.concatenate(([0.0], np.cumsum(increments / area)))
 
 
 class ACE:
@@ -354,8 +374,11 @@ class ACE:
         The adjustment is applied to each table's PDF via the same bin
         convention as :meth:`perturb`/:meth:`perturb_nu` (``1 +
         adjustment`` over ``E_min < E_out <= E_max``), then the PDF is
-        renormalized to unit area and the CDF rebuilt by trapezoidal
-        integration.
+        renormalized to unit area and the CDF rebuilt, both integrated
+        according to the table's interpolation law. A histogram table
+        (INTT=1) holds ``pdf[i]`` over ``[E_i, E_i+1)``, so its values are
+        binned by the interval midpoint; a lin-lin table (INTT=2) is
+        integrated with the trapezoidal rule.
 
         Parameters
         ----------
@@ -370,8 +393,12 @@ class ACE:
             in this ACE file.
         NotImplementedError
             If the MT's energy distribution is not a single LAW=4
-            (Continuum Tabular Distribution) table.
+            (Continuum Tabular Distribution) table, or one of its tables
+            has discrete lines or an interpolation law other than histogram
+            or lin-lin. Nothing is modified in that case.
         """
+        # Check every MT before modifying anything, so an unsupported table leaves the file unchanged.
+        todo = []
         for mt_key, group in chi_adjustment.groupby(level="MT"):
             mt = cast("int", mt_key)
             base_mt = mt - CHI_MF if mt >= CHI_MF else mt
@@ -386,10 +413,29 @@ class ACE:
                     f"MT={mt} (reaction MT={base_mt}) energy distribution for ZAID={self.header.zaid} "
                     f"is LAW={dist.law}; only LAW=4 (Continuum Tabular Distribution) can be perturbed."
                 )
-            bins = group.droplevel("MT")
             for table in dist.tables:
-                _apply_bin_adjustment(table.pdf, table.energy_out, bins)
-                _renormalize_and_rebuild_cdf(table.pdf, table.energy_out, table.cdf)
+                if table.n_discrete > 0:
+                    raise NotImplementedError(
+                        f"MT={mt} (reaction MT={base_mt}) energy distribution for ZAID={self.header.zaid} "
+                        f"has {table.n_discrete} discrete lines; only continuous LAW=4 tables can be perturbed."
+                    )
+                if table.intt not in (_HISTOGRAM, _LIN_LIN):
+                    raise NotImplementedError(
+                        f"MT={mt} (reaction MT={base_mt}) energy distribution for ZAID={self.header.zaid} "
+                        f"has interpolation law INTT={table.intt}; only histogram (1) and lin-lin (2) "
+                        "tables can be perturbed."
+                    )
+            todo.append((dist, group.droplevel("MT")))
+
+        for dist, bins in todo:
+            for table in dist.tables:
+                # A histogram value holds over [E_i, E_i+1), so it is binned by the interval
+                # midpoint; a lin-lin value belongs to its grid point.
+                energies = table.energy_out
+                if table.intt == _HISTOGRAM:
+                    energies = np.append((energies[:-1] + energies[1:]) / 2.0, energies[-1])
+                _apply_bin_adjustment(table.pdf, energies, bins)
+                _renormalize_and_rebuild_cdf(table.pdf, table.energy_out, table.cdf, table.intt)
 
     def _propagate_to_totals(self, rxn: Reaction, delta: np.ndarray) -> None:
         """Keep ``total_xs`` (and ``absorption_xs``) consistent after a perturbation.

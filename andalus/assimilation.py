@@ -709,6 +709,9 @@ class AssimilationSuite:
             A new AssimilationSuite instance with updated calculated values. Applications
             are optional: without them, only the nuclear data and the benchmarks are
             adjusted and the posterior keeps the (empty) applications of this suite.
+            Its ``xs_adjustment`` is relative to the original prior (``prior_xs``): when
+            this suite is already a posterior, the new step is combined with the earlier
+            adjustment as ``(1 + previous) * (1 + step) - 1``.
 
         Raises
         ------
@@ -774,11 +777,21 @@ class AssimilationSuite:
                 {title: replace(app, c=c_a.loc[title]) for title, app in self.applications.items()}
             )
 
+        # On a posterior, dx is relative to the already adjusted data. Combine it with the earlier
+        # adjustment so that xs_adjustment stays relative to the original prior (prior_xs, prior_c),
+        # which is what the ACE export applies it to.
+        xs_adjustment = dx
+        if self.is_posterior:
+            assert self.xs_adjustment is not None
+            index = self.xs_adjustment.index.union(dx.index)
+            previous = self.xs_adjustment.reindex(index, fill_value=0.0)
+            xs_adjustment = (1.0 + previous) * (1.0 + dx.reindex(index, fill_value=0.0)) - 1.0
+
         posteriorSuite = AssimilationSuite(
             benchmarks=BenchmarkSuite(post_bench, exp_corr=self.benchmarks.exp_corr),
             applications=post_applications,
             covariances=CovarianceSuite.from_df(Vx_post),
-            xs_adjustment=dx,
+            xs_adjustment=xs_adjustment,
             prior_c=self.prior_c,
             xs=self.xs.adjusted(dx) if self.xs is not None else None,
             prior_xs=self.prior_xs,

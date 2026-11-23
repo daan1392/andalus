@@ -146,6 +146,14 @@ def read_serpent(path):
         return serpentTools.read(path)
 
 
+def _check_kind(h5file, kind, file_path, what="Benchmark"):
+    """Raise a KeyError listing the available kinds if ``kind`` is not a group of the open HDF5 file."""
+    if kind not in h5file:
+        raise KeyError(
+            f"{what} kind '{kind}' not found in {file_path}. Kinds available in the file: {sorted(h5file.keys())}"
+        )
+
+
 def sandwich(s1, cov, s2=None):
     """
     Perform the sandwich formula to propagate uncertainties using

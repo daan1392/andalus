@@ -10,7 +10,12 @@ file with ``CrossSectionMG.to_hdf5`` and ``Covariance.to_hdf5``::
     zai_{ZAI}/covariances/data
     zai_{ZAI}/covariances_index/level_{i}
 
-An existing HDF5 file is extended, not replaced. With ``--quantities xs`` only
+The GENDF and ERRORR files are kept in a subdirectory of the ERRORR directory per
+energy grid, temperature and reconstruction tolerance (e.g. ``errorr/ECCO33_300K_err0.01``),
+so they are reused only by runs with the same settings.
+
+An existing HDF5 file is extended, not replaced, provided it was built with the same
+energy grid, temperature and tolerance (otherwise an error is raised). With ``--quantities xs`` only
 the multigroup data is written, and its MT numbers are merged into the stored
 table, so for example chi (MT 35018) can be added to an existing library.
 
@@ -47,7 +52,7 @@ Everything the previous libraries contained, on the ECCO-33 grid::
         --output jeff40.h5 --energy-grid ECCO33 --jobs 4
 """
 
-__all__ = ["zai_from_filename", "process_endf6", "remove_zais", "build_library", "main"]
+__all__ = ["zai_from_filename", "njoy_cache_dir", "process_endf6", "remove_zais", "build_library", "main"]
 
 import argparse
 import os
@@ -162,6 +167,51 @@ def zai_from_filename(filename: str) -> int:
     return zai
 
 
+def njoy_cache_dir(errorr_dir: str, energy_grid: str, temperature: float, err: float) -> str:
+    """
+    Return the subdirectory of ``errorr_dir`` for NJOY files made with the given settings.
+
+    Parameters
+    ----------
+    errorr_dir : str
+        Top-level directory for the GENDF and ERRORR files.
+    energy_grid : str
+        Name of a grid in ``sandy.energy_grids``.
+    temperature : float
+        Temperature in K.
+    err : float
+        Reconstruction tolerance (fractional) for NJOY.
+
+    Returns
+    -------
+    str
+        ``{errorr_dir}/{energy_grid}_{temperature}K_err{err}``, e.g.
+        ``errorr/ECCO33_300K_err0.01``.
+    """
+    return os.path.join(errorr_dir, f"{energy_grid}_{temperature:g}K_err{err:g}")
+
+
+_LIBRARY_SETTINGS = ("energy_grid", "temperature", "err")
+
+
+def _check_library_settings(output: str, settings: dict) -> None:
+    """Raise if the existing library ``output`` was built with other processing settings."""
+    if not os.path.exists(output):
+        return
+    with tables.open_file(output, "r") as h5:
+        attrs = h5.root._v_attrs
+        stored = {key: getattr(attrs, key) for key in _LIBRARY_SETTINGS if key in attrs._v_attrnames}
+    mismatch = {key: value for key, value in stored.items() if value != settings[key]}
+    if mismatch:
+        found = ", ".join(f"{key}={value}" for key, value in mismatch.items())
+        requested = ", ".join(f"{key}={settings[key]}" for key in mismatch)
+        raise ValueError(
+            f"Library '{output}' was built with {found}, but this call uses {requested}. "
+            "Data with different processing settings cannot be mixed in one library; "
+            "write to a new output file instead."
+        )
+
+
 def process_endf6(
     endf6_path: str,
     errorr_dir: str,
@@ -184,7 +234,9 @@ def process_endf6(
     endf6_path : str
         Path to the ENDF-6 file.
     errorr_dir : str
-        Directory for the GENDF and ERRORR files, named ``{endf6 file stem}.{section}``.
+        Directory for the GENDF and ERRORR files. They are stored in the subdirectory for the
+        processing settings (see :func:`njoy_cache_dir`) as ``{endf6 file stem}.{section}``,
+        so files made with another grid, temperature or ``err`` are never reused.
     sections : tuple of str
         Sections to produce, a subset of ``SECTIONS``.
     temperature : float, default 300.0
@@ -203,7 +255,8 @@ def process_endf6(
         (an evaluation without MF35 gives no ``errorr35``).
     """
     stem = os.path.splitext(os.path.basename(endf6_path))[0]
-    paths = {key: os.path.join(errorr_dir, f"{stem}.{key}") for key in sections}
+    cache_dir = njoy_cache_dir(errorr_dir, energy_grid, temperature, err)
+    paths = {key: os.path.join(cache_dir, f"{stem}.{key}") for key in sections}
 
     # Only sections without an ERRORR file are processed, unless overwrite is set.
     todo = [key for key in sections if overwrite or not os.path.exists(paths[key])]
@@ -225,7 +278,7 @@ def process_endf6(
             suppress_njoy_output=True,
             suppress_warnings=True,
         )
-        os.makedirs(errorr_dir, exist_ok=True)
+        os.makedirs(cache_dir, exist_ok=True)
         if GENDF in todo:
             missing = _NUBAR_MTS - set(records.loc[records.MF == 1, "MT"])
             with _groupr_without(missing):
@@ -305,9 +358,11 @@ def build_library(
     endf6_dir : str
         Directory with ENDF-6 files, see :func:`zai_from_filename` for the supported names.
     errorr_dir : str
-        Directory for the GENDF and ERRORR files.
+        Directory for the GENDF and ERRORR files, kept per processing settings in the
+        subdirectory given by :func:`njoy_cache_dir`.
     output : str
-        HDF5 file, created or extended.
+        HDF5 file, created or extended. An existing file must have been built with the same
+        ``energy_grid``, ``temperature`` and ``err`` (stored as root attributes).
     sections : tuple of str
         Sections to process, a subset of ``SECTIONS``. With ``"gendf"`` the multigroup data is
         read from the GROUPR output (every reaction, also for nuclides without covariances),
@@ -349,10 +404,18 @@ def build_library(
     dict[str, list[int]]
         ZAIs by outcome: ``"written"``, ``"no_data"`` (no requested section in
         the evaluation) and ``"failed"``.
+
+    Raises
+    ------
+    ValueError
+        If ``sections`` or ``quantities`` has an unknown entry, or if ``output`` exists and
+        was built with another ``energy_grid``, ``temperature`` or ``err``.
     """
     unknown = (set(sections) - set(SECTIONS)) | (set(quantities) - set(QUANTITIES))
     if unknown:
         raise ValueError(f"Unknown sections or quantities: {sorted(unknown)}")
+    settings = {"energy_grid": energy_grid, "temperature": temperature, "err": err}
+    _check_library_settings(output, settings)
 
     candidates = {}
     for name in sorted(os.listdir(endf6_dir)):
@@ -440,9 +503,8 @@ def build_library(
 
     if os.path.exists(output):
         with tables.open_file(output, "a") as h5:
-            h5.root._v_attrs.energy_grid = energy_grid
-            h5.root._v_attrs.temperature = temperature
-            h5.root._v_attrs.err = err
+            for key, value in settings.items():  # equal to any stored value, see _check_library_settings
+                setattr(h5.root._v_attrs, key, value)
             h5.root._v_attrs.processing_timestamp = pd.Timestamp.now().isoformat()
 
     n_written, n_no_data, n_failed = (len(outcome[k]) for k in ("written", "no_data", "failed"))

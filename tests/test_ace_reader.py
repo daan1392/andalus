@@ -501,3 +501,46 @@ class TestPerturbChi:
         )
         with pytest.raises(NotImplementedError):
             ace.perturb_chi(adjustment)
+
+    def test_histogram_tables_are_integrated_as_histograms(self):
+        """Histogram (INTT=1) tables used to be renormalized with the trapezoidal rule, which
+        gives the wrong area and a CDF inconsistent with the PDF."""
+        ace = ACE.read(U235_PATH)
+        dist = ace.chi[18]
+        for table in dist.tables:  # use U-235's grids as histogram tables
+            table.intt = 1
+        table = dist.tables[0]
+        e_out, original = table.energy_out.copy(), table.pdf.copy()
+
+        # Bin edges on grid points: the segments [e_out[i], e_out[i+1]) for lo <= i < hi lie in the bin.
+        lo, hi = len(e_out) // 4, 3 * len(e_out) // 4
+        adjustment = pd.Series(
+            [0.2],
+            index=pd.MultiIndex.from_tuples(
+                [(35018, float(e_out[lo]) * _EV_PER_MEV, float(e_out[hi]) * _EV_PER_MEV)],
+                names=["MT", "E_min_eV", "E_max_eV"],
+            ),
+        )
+        ace.perturb_chi(adjustment)
+
+        widths = np.diff(e_out)
+        expected = original.copy()
+        expected[lo:hi] *= 1.2
+        expected /= np.sum(widths * expected[:-1])
+        np.testing.assert_allclose(table.pdf, expected, rtol=1e-12)
+        assert np.sum(widths * table.pdf[:-1]) == pytest.approx(1.0, abs=1e-12)
+        np.testing.assert_allclose(table.cdf, np.concatenate(([0.0], np.cumsum(widths * table.pdf[:-1]))), atol=1e-14)
+
+    def test_discrete_lines_raise_without_modifying(self):
+        ace = ACE.read(U235_PATH)
+        dist = ace.chi[18]
+        dist.tables[-1].n_discrete = 1
+        before = [t.pdf.copy() for t in dist.tables]
+        adjustment = pd.Series(
+            [0.1],
+            index=pd.MultiIndex.from_tuples([(35018, 0.0, 30.0 * _EV_PER_MEV)], names=["MT", "E_min_eV", "E_max_eV"]),
+        )
+        with pytest.raises(NotImplementedError, match="discrete lines"):
+            ace.perturb_chi(adjustment)
+        for table, pdf in zip(dist.tables, before, strict=True):
+            np.testing.assert_array_equal(table.pdf, pdf)
