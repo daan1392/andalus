@@ -78,6 +78,13 @@ NU_MTS = {452: "total", 456: "prompt"}
 #: subtracts this offset to find the underlying reaction MT in :attr:`ACE.chi`.
 CHI_MF = 35000
 
+#: ANDALUS encodes the MF=34 Legendre moments of the elastic angular
+#: distribution the same way (34251 is mubar, 34252..34254 the P2..P4
+#: moments). The ACE angular distributions (AND block) are not parsed, so
+#: :meth:`AssimilationSuite.to_ace_direct` skips MTs in
+#: ``[LEGENDRE_MF, CHI_MF)`` with a warning.
+LEGENDRE_MF = 34000
+
 
 #: ACE files store energies in MeV (the reader never converts this, so
 #: ``Reaction.energies``, nu-bar/chi energy grids, etc. are all MeV), while

@@ -374,6 +374,47 @@ def test_to_ace_no_posterior(assimilation_setup):
         _ = suite.to_ace(library="jeff_40")
 
 
+def test_to_ace_warns_about_mubar_and_passes_supported_kinds(assimilation_setup, monkeypatch):
+    """Mubar (MT 34251) cannot be exported through SANDY (it only applies MF31, MF33 and
+    MF35 perturbations): to_ace must warn about it instead of dropping it silently, and
+    hand the other kinds to SANDY with ENDF MT numbers (35018 -> MF35 MT18)."""
+    import sandy
+
+    calls = []
+
+    class FakeTape:
+        mat = [9228]
+
+        def apply_perturbations(self, smps, **kwargs):
+            calls.append({mf: smp.data for mf, smp in smps.items()})
+
+    monkeypatch.setattr(sandy, "get_endf6_file", lambda *args, **kwargs: FakeTape())
+
+    suite = assimilation_setup
+    suite.xs_adjustment = pd.Series(
+        [0.01, 0.02, 0.03, 0.04],
+        index=pd.MultiIndex.from_tuples(
+            [
+                (922350, 18, 1e5, 1e6),
+                (922350, 456, 1e5, 1e6),
+                (922350, 34251, 1e5, 1e6),
+                (922350, 35018, 1e5, 1e6),
+            ],
+            names=["ZAI", "MT", "E_min_eV", "E_max_eV"],
+        ),
+    )
+
+    with pytest.warns(UserWarning, match=r"MT 34251 \(U235\)"):
+        suite.to_ace(library="jeff_40")
+
+    assert len(calls) == 1
+    smps = calls[0]
+    assert set(smps) == {31, 33, 35}
+    assert set(smps[33].index.get_level_values("MT")) == {18}
+    assert set(smps[31].index.get_level_values("MT")) == {456}
+    assert set(smps[35].index.get_level_values("MT")) == {18}
+
+
 def test_parse_xsdata_maps_za_to_path(tmp_path):
     """Fields are alias, filename, type, ZA, isomeric_state, awr, temperature,
     binary_flag, path (the format written by to_ace_direct's create_xsdata),

@@ -6,13 +6,14 @@ for assimilation purposes.
 __all__ = ["AssimilationSuite"]
 
 import os
+import warnings
 from dataclasses import dataclass, replace
 
 import numpy as np
 import pandas as pd
 
 from andalus.ace import ACE
-from andalus.ace.core import CHI_MF, NU_MTS
+from andalus.ace.core import CHI_MF, LEGENDRE_MF, NU_MTS
 from andalus.application import ApplicationSuite
 from andalus.benchmark import BenchmarkSuite
 from andalus.covariance import CovarianceSuite
@@ -58,6 +59,42 @@ def _parse_xsdata(path: str) -> dict[int, str]:
                 if za not in libraries:
                     libraries[za] = str(lib)
     return libraries
+
+
+def _is_legendre_mt(mt: int) -> bool:
+    """Whether ``mt`` is an MF34 Legendre moment in the MF*1000+MT convention (e.g. 34251, mubar)."""
+    return LEGENDRE_MF <= mt < CHI_MF
+
+
+def _warn_not_exported(xs_adjustment: pd.Series, zais, exported_mts, reason: str) -> None:
+    """Warn about the adjustments of ``zais`` whose MT is not in ``exported_mts``.
+
+    Parameters
+    ----------
+    xs_adjustment : pd.Series
+        Adjustments with index ``(ZAI, MT, E_min_eV, E_max_eV)``.
+    zais : iterable of int
+        ZAIs that are exported.
+    exported_mts : iterable of int
+        MT numbers that are written to the ACE files.
+    reason : str
+        Why the other MT numbers are not exported, added to the message.
+    """
+    zai_level = xs_adjustment.index.get_level_values("ZAI")
+    mt_level = xs_adjustment.index.get_level_values("MT")
+    skipped = zai_level.isin(list(zais)) & ~mt_level.isin(list(exported_mts))
+    if not skipped.any():
+        return
+    pairs = pd.MultiIndex.from_arrays([zai_level[skipped], mt_level[skipped]]).unique()
+    by_mt: dict[int, list[str]] = {}
+    for zai, mt in pairs:
+        by_mt.setdefault(int(mt), []).append(zam2nuclide(zai))
+    listed = "; ".join(f"MT {mt} ({', '.join(nuclides)})" for mt, nuclides in sorted(by_mt.items()))
+    warnings.warn(
+        f"Adjustments for {listed} are not exported and left unperturbed in the ACE files: {reason}.",
+        UserWarning,
+        stacklevel=3,
+    )
 
 
 @dataclass
@@ -758,9 +795,11 @@ class AssimilationSuite:
             Path to the base ENDF6 library or the name of the library
             recognized by sandy.
         reaction_dict : dict, optional
-            A dictionary mapping ENDF6 MT numbers to reaction types.
-            Default handles standard cross-sections (MF31, 33, 34, 35).
-            Format: {MF: [MT_list]}.
+            A dictionary mapping ENDF6 MF numbers to the ANDALUS MT numbers
+            exported from that file, ``{MF: [MT_list]}``. Only MF31 (nubar),
+            MF33 (cross sections) and MF35 (chi, e.g. 35018) are supported, as
+            these are the only perturbation kinds SANDY applies. Default:
+            ``{31: [456], 33: [2, 4, 18, 102], 35: [35018]}``.
         verbose : bool, default False
             If True, prints detailed progress and SANDY execution logs.
         temperature : int, default 300
@@ -782,10 +821,18 @@ class AssimilationSuite:
             If `self.xs_adjustment` is None, indicating no posterior
             has been calculated.
 
+        Warns
+        -----
+        UserWarning
+            If ``xs_adjustment`` contains MT numbers that are not exported (not
+            in a supported ``reaction_dict`` entry), e.g. mubar (MT 34251). These
+            adjustments are left out of the ACE files.
+
         Notes
         -----
         - Currently the method supports perturbations to nubar, cross sections
-         and prompt fission neutron energy spectrum.
+         and prompt fission neutron energy spectrum. Mubar (MF34) adjustments
+         cannot be exported: SANDY ignores MF34 perturbations.
 
         See Also
         --------
@@ -795,10 +842,14 @@ class AssimilationSuite:
         """
         import sandy
 
-        # Default MT mapping for nubar, cross-sections, Elastic scattering cosine
-        # and fission energy spectrum adjustments.
+        # Default MT mapping for nubar, cross-section and fission energy spectrum adjustments.
         if reaction_dict is None:
-            reaction_dict = {31: [456], 33: [2, 4, 18, 102], 34: [340252], 35: [35018]}
+            reaction_dict = {31: [456], 33: [2, 4, 18, 102], 35: [35018]}
+
+        # Perturbation kinds SANDY applies, with the offset between the ANDALUS MT
+        # numbers and the ENDF MT numbers (35018 -> MF35 MT18).
+        mt_offsets = {31: 0, 33: 0, 35: 35000}
+        exported_mts = {mt for mf, mts in reaction_dict.items() if mf in mt_offsets for mt in mts}
 
         def _reindex_to_samples(delta, MAT):
             """Internal helper to format adjustments for SANDY Samples."""
@@ -833,23 +884,16 @@ class AssimilationSuite:
             # convert adjustments into the correct format for SANDY
             delta_xs_reindexed = _reindex_to_samples(delta_xs, mat)
 
-            mf31 = delta_xs_reindexed.query(f"MT in {reaction_dict[31]}").copy()
-            mf33 = delta_xs_reindexed.query(f"MT in {reaction_dict[33]}").copy()
-            mf34 = delta_xs_reindexed.query(f"MT in {reaction_dict[34]}").copy()
-            mf34 = mf34.rename(index=lambda x: x - 34000, level="MT")
-            mf35 = delta_xs_reindexed.query(f"MT in {reaction_dict[35]}").copy()
-            mf35 = mf35.rename(index=lambda x: x - 35000, level="MT")
-
             # Create dictionary of SANDY Samples objects for the reactions to be perturbed
             smps = {}
-            if not mf31.empty:
-                smps[31] = sandy.Samples(mf31)
-            if not mf33.empty:
-                smps[33] = sandy.Samples(mf33)
-            if not mf34.empty:
-                smps[34] = sandy.Samples(mf34)
-            if not mf35.empty:
-                smps[35] = sandy.Samples(mf35)
+            mt_level = delta_xs_reindexed.index.get_level_values("MT")
+            for mf, offset in mt_offsets.items():
+                selected = delta_xs_reindexed[mt_level.isin(reaction_dict.get(mf, []))]
+                if selected.empty:
+                    continue
+                if offset:
+                    selected = selected.rename(index=lambda x, offset=offset: x - offset, level="MT")
+                smps[mf] = sandy.Samples(selected)
 
             # Apply perturbations to the ENDF6 tape and generate perturbed ACE files
             tape.apply_perturbations(
@@ -871,6 +915,10 @@ class AssimilationSuite:
             app_zais = set(self.applications.zais) if self.applications else set()
             zais = [zai for zai in zais if zai in app_zais]
             print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
+        _warn_not_exported(
+            xs_adjustment, zais, exported_mts, reason="SANDY only applies MF31, MF33 and MF35 perturbations"
+        )
 
         xsdata_lines = []
 
@@ -914,8 +962,10 @@ class AssimilationSuite:
 
         MTs are routed by ANDALUS's own numbering convention: 452/456 go to
         `perturb_nu`, MT >= 35000 (ANDALUS's MF*1000+MT chi encoding, e.g.
-        35018 for prompt fission chi) go to `perturb_chi`, and everything else
-        goes to `perturb`.
+        35018 for prompt fission chi) go to `perturb_chi`, MF34 Legendre
+        moments (34000 <= MT < 35000, e.g. 34251 for mubar) are skipped with a
+        warning, since the ACE angular distributions are not perturbed, and
+        everything else goes to `perturb`.
 
         Source ACE files can be located either by directory convention
         (`ace_dir`) or, for libraries that don't follow that naming convention
@@ -962,6 +1012,12 @@ class AssimilationSuite:
         FileNotFoundError
             If the source ACE file for a ZAI cannot be located.
 
+        Warns
+        -----
+        UserWarning
+            If ``xs_adjustment`` contains MF34 Legendre moment adjustments
+            (e.g. mubar, MT 34251), which are left out of the ACE files.
+
         Notes
         -----
         The xsdata parsing follows the format used by
@@ -992,6 +1048,14 @@ class AssimilationSuite:
             app_zais = set(self.applications.zais) if self.applications else set()
             zais = [zai for zai in zais if zai in app_zais]
             print(f"Filtering to only ZAIs present in applications. Number of ZAIs to process: {len(zais)}")
+
+        all_mts = xs_adjustment.index.get_level_values("MT").unique()
+        _warn_not_exported(
+            xs_adjustment,
+            zais,
+            [mt for mt in all_mts if not _is_legendre_mt(mt)],
+            reason="the ACE angular distributions (MF34 Legendre moments, e.g. mubar) are not perturbed",
+        )
 
         os.makedirs(out_dir, exist_ok=True)
 
@@ -1025,9 +1089,10 @@ class AssimilationSuite:
             delta = xs_adjustment.loc[zai]
 
             mt_levels = delta.index.get_level_values("MT")
+            legendre_mask = (mt_levels >= LEGENDRE_MF) & (mt_levels < CHI_MF)
             nu_mask = mt_levels.isin(NU_MTS)
             chi_mask = mt_levels >= CHI_MF
-            xs_delta = delta[~nu_mask & ~chi_mask]
+            xs_delta = delta[~nu_mask & ~chi_mask & ~legendre_mask]
             nu_delta = delta[nu_mask]
             chi_delta = delta[chi_mask]
 
