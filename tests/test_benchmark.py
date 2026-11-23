@@ -648,3 +648,15 @@ def test_from_yaml_kind_defaults_to_keff(test_benchmark, tmp_path):
     config = tmp_path / "config.yaml"
     config.write_text(f"benchmarks:\n  - hdf5_path: {db.as_posix()}\n")
     assert BenchmarkSuite.from_yaml(str(config)).titles == ["HMF001"]
+
+
+def test_from_serpent_rejects_non_keff_kind():
+    with pytest.raises(ValueError, match="only supports kind='keff'"):
+        Benchmark.from_serpent(
+            title="HMF001",
+            m=1.0,
+            dm=0.001,
+            sens0_path="data/hmf001.ser_sens0.m",
+            results_path="data/hmf001.ser_res.m",
+            kind="void",
+        )

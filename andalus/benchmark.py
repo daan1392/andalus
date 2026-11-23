@@ -102,7 +102,8 @@ class Benchmark:
         results_path : str
             Path to the Serpent ``_res.m`` results file.
         kind : str, optional
-            Kind of observable, by default ``"keff"``.
+            Kind of observable, by default ``"keff"``. Only ``"keff"`` is
+            supported; other kinds raise a ValueError.
         materials : list of str, optional
             Materials for which the sensitivity is extracted. Defaults to
             ``["total"]``.
@@ -123,6 +124,11 @@ class Benchmark:
             A Benchmark with the calculated value, sensitivity, and
             (optionally) flux spectrum extracted from the Serpent files.
         """
+        if kind != "keff":
+            raise ValueError(
+                f"Benchmark.from_serpent only supports kind='keff', got '{kind}'. The calculated value is "
+                "read from absKeff and Serpent writes no sensitivity for other kinds."
+            )
         if materials is None:
             materials = ["total"]
         if pertlist is None:
@@ -135,6 +141,7 @@ class Benchmark:
         sensitivity = Sensitivity.from_serpent(
             sens0_path=sens0_path,
             title=title,
+            kind=kind,
             materiallist=materials,
             zailist=zailist,
             pertlist=pertlist,

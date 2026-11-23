@@ -200,7 +200,7 @@ class Application:
             flux=flux,
         )
 
-    def to_hdf5(self, file_path="benchmarks.h5"):
+    def to_hdf5(self, file_path="applications.h5"):
         """
         Save the application data to an HDF5 file.
 
@@ -208,7 +208,7 @@ class Application:
         ----------
         file_path : str, optional
             The path to the HDF5 file where the application data will be saved.
-              Default is 'benchmarks.h5'.
+              Default is 'applications.h5'.
         """
         with h5py.File(file_path, "a") as f:
             # Create group for this application if it exists
@@ -235,7 +235,7 @@ class Application:
         print(f"Application: {self.title}")
         print(f"Type: {self.kind}")
         print(f"Calculated: {self.c} ± {self.dc}")
-        print(f"Measured: {self.m} ± {self.dm}")
+        print(f"Measurement: {self.m} ± {self.dm}")
 
     def plot_sensitivity(self, zais, perts, ax=None, **kwargs):
         """Plot the sensitivity profiles for the application.
@@ -556,12 +556,22 @@ class ApplicationSuite:
                 )
                 applications[application.title] = application
             elif "hdf5_path" in application_config:
-                application = Application.from_hdf5(
-                    file_path=application_config["hdf5_path"],
-                    title=application_config["title"],
-                    kind=application_config.get("kind", "keff"),
-                )
-                applications[application.title] = application
+                # Same options as BenchmarkSuite.from_yaml: one title, a list of titles, or all of a kind.
+                hdf5_path = application_config["hdf5_path"]
+                kind = application_config.get("kind", "keff")
+                titles = application_config.get("titles", application_config.get("title"))
+
+                if titles is None or titles == []:
+                    suite = cls.from_hdf5(file_path=hdf5_path, titles=None, kind=kind)
+                    applications.update(suite.applications)
+                elif isinstance(titles, str):
+                    application = Application.from_hdf5(file_path=hdf5_path, title=titles, kind=kind)
+                    applications[application.title] = application
+                elif isinstance(titles, list):
+                    suite = cls.from_hdf5(file_path=hdf5_path, titles=titles, kind=kind)
+                    applications.update(suite.applications)
+                else:
+                    raise TypeError("'title'/'titles' must be a string, list, or None")
 
         return cls(applications=applications)
 
@@ -613,7 +623,7 @@ class ApplicationSuite:
         Raises
         ------
         KeyError
-            If an applicaiton title in the suite is missing from the index of `new_c`.
+            If an application title in the suite is missing from the index of `new_c`.
         """
         return ApplicationSuite({title: replace(bm, c=new_c.loc[title]) for title, bm in self.items()})
 

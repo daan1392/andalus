@@ -458,3 +458,16 @@ class TestApplicationFlux:
             title="HMF001",
         )
         assert a.flux is fake_flux
+
+
+@pytest.mark.parametrize("titles_yaml, expected", [("", ["HMF001", "VOID0"]), ("\n    titles: [VOID0]", ["VOID0"])])
+def test_suite_from_yaml_hdf5_titles(test_application, tmp_path, titles_yaml, expected):
+    """ApplicationSuite.from_yaml used to accept only a single `title` from HDF5, unlike benchmarks."""
+    from dataclasses import replace
+
+    db = tmp_path / "apps.h5"
+    test_application.to_hdf5(str(db))
+    replace(test_application, title="VOID0").to_hdf5(str(db))
+    config = tmp_path / "config.yaml"
+    config.write_text(f"applications:\n  - hdf5_path: {db.as_posix()}{titles_yaml}\n")
+    assert ApplicationSuite.from_yaml(str(config)).titles == expected

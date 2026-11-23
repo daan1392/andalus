@@ -100,7 +100,7 @@ Optional key:
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `kind` | string | `"keff"` | HDF5 group key |
+| `kind` | string | `"keff"` | HDF5 group key; a kind that is not in the file raises a `KeyError` |
 
 ---
 
@@ -122,10 +122,18 @@ applications:
 
 ### From HDF5
 
+As for benchmarks, load a single entry, a named subset, or all entries of a `kind`:
+
 ```yaml
 applications:
   - title: my-reactor
     hdf5_path: data/applications.h5
+
+  - titles: [my-reactor, waste-storage]
+    hdf5_path: data/applications.h5
+
+  # All applications in the file (omit titles / set to null)
+  - hdf5_path: data/applications.h5
 ```
 
 ---
