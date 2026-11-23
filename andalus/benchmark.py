@@ -12,7 +12,7 @@ import pandas as pd
 
 from andalus.sensitivity import Sensitivity
 from andalus.spectrum import FluxSpectrum
-from andalus.utils import read_serpent
+from andalus.utils import _check_kind, read_serpent
 
 
 def _require_flux(benchmark: "Benchmark") -> FluxSpectrum:
@@ -167,8 +167,7 @@ class Benchmark:
             A new Benchmark instance with the loaded data.
         """
         with h5py.File(file_path, "r") as f:
-            if kind not in f:
-                raise KeyError(f"Benchmark type '{kind}' not found in {file_path}")
+            _check_kind(f, kind, file_path, "Benchmark")
             if title not in f[kind]:
                 raise KeyError(f"Benchmark '{title}' not found in {file_path}")
 
@@ -573,11 +572,18 @@ class BenchmarkSuite:
         titles : list, optional
             Titles which have to be extracted from the database, if None
             return all the benchmarks available in the database, by default None.
+        kind : str, default "keff"
+            HDF5 group (kind of observable) the benchmarks are read from.
 
         Returns
         -------
         BenchmarkSuite
             Returns a BenchmarkSuite object containing the imported Benchmark objects.
+
+        Raises
+        ------
+        KeyError
+            If `kind` is not a group of the file, or a title is not stored under it.
 
         Notes
         -----
@@ -585,9 +591,10 @@ class BenchmarkSuite:
         """
         if not titles:
             with h5py.File(file_path, "r") as f:
+                _check_kind(f, kind, file_path, "Benchmark")
                 titles = list(f[kind].keys())
 
-        return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title) for title in titles})
+        return cls(benchmarks={title: Benchmark.from_hdf5(file_path, title, kind=kind) for title in titles})
 
     @classmethod
     def from_yaml(cls, path: str):
@@ -629,11 +636,8 @@ class BenchmarkSuite:
                 benchmarks[benchmark.title] = benchmark
             elif "hdf5_path" in benchmark_config:
                 hdf5_path = benchmark_config["hdf5_path"]
-
-                with h5py.File(hdf5_path, "r") as f:
-                    kind = benchmark_config.get("kind")
-                    if kind is None or kind not in f:
-                        kind = "keff"
+                # A kind that is not in the file raises (in from_hdf5) instead of silently becoming keff.
+                kind = benchmark_config.get("kind", "keff")
 
                 titles = benchmark_config.get("titles", benchmark_config.get("title"))
 

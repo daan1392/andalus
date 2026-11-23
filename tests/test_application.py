@@ -200,6 +200,35 @@ class TestApplicationSuiteHDF5:
             assert len(suite.applications) == 1
             assert "HMF001" in suite.applications
 
+    @pytest.mark.parametrize("titles", [None, ["VOID1"]])
+    def test_suite_from_hdf5_passes_kind(self, test_application, tmp_path, titles):
+        """The suite listed the titles under ``kind`` but read every application from 'keff'."""
+        from dataclasses import replace
+
+        filepath = str(tmp_path / "suite.h5")
+        test_application.to_hdf5(filepath)  # keff/HMF001
+        replace(test_application, title="VOID1", kind="void", c=-0.0123).to_hdf5(filepath)
+
+        suite = ApplicationSuite.from_hdf5(filepath, titles=titles, kind="void")
+        assert list(suite.applications) == ["VOID1"]
+        assert suite.get("VOID1").kind == "void" and suite.get("VOID1").c == -0.0123
+
+    def test_suite_from_hdf5_unknown_kind_lists_available(self, test_application, tmp_path):
+        filepath = str(tmp_path / "suite.h5")
+        test_application.to_hdf5(filepath)
+        with pytest.raises(KeyError, match=r"kind 'void' not found.*\['keff'\]"):
+            ApplicationSuite.from_hdf5(filepath, titles=None, kind="void")
+
+    def test_from_serpent_rejects_non_keff_kind(self):
+        """kind='void' used to read absKeff as the void coefficient."""
+        with pytest.raises(ValueError, match="only supports kind='keff'"):
+            Application.from_serpent(
+                title="VOID1",
+                sens0_path="data/hmf001.ser_sens0.m",
+                results_path="data/hmf001.ser_res.m",
+                kind="void",
+            )
+
     def test_suite_from_hdf5_without_titles(self, test_application):
         """Test loading all applications from HDF5 when titles is None."""
         with tempfile.TemporaryDirectory() as tmpdir:

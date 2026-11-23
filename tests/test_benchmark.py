@@ -629,3 +629,22 @@ class TestBenchmarkSuiteExperimentalCorrelation:
         )
         with pytest.raises(KeyError):  # no benchmarks loaded, so the titles are unknown
             BenchmarkSuite.from_yaml(str(config))
+
+
+@pytest.mark.parametrize("titles_yaml", ["", "\n    titles: [HMF001]"])
+def test_from_yaml_unknown_kind_raises(test_benchmark, tmp_path, titles_yaml):
+    """A configured kind that is not in the file used to fall back silently to 'keff'."""
+    db = tmp_path / "db.h5"
+    test_benchmark.to_hdf5(str(db))
+    config = tmp_path / "config.yaml"
+    config.write_text(f"benchmarks:\n  - hdf5_path: {db.as_posix()}\n    kind: kef{titles_yaml}\n")
+    with pytest.raises(KeyError, match=r"kind 'kef' not found.*\['keff'\]"):
+        BenchmarkSuite.from_yaml(str(config))
+
+
+def test_from_yaml_kind_defaults_to_keff(test_benchmark, tmp_path):
+    db = tmp_path / "db.h5"
+    test_benchmark.to_hdf5(str(db))
+    config = tmp_path / "config.yaml"
+    config.write_text(f"benchmarks:\n  - hdf5_path: {db.as_posix()}\n")
+    assert BenchmarkSuite.from_yaml(str(config)).titles == ["HMF001"]

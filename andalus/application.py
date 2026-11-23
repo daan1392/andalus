@@ -11,7 +11,7 @@ import pandas as pd
 
 from andalus.sensitivity import Sensitivity
 from andalus.spectrum import FluxSpectrum
-from andalus.utils import read_serpent
+from andalus.utils import _check_kind, read_serpent
 
 
 def _require_flux(application: "Application") -> FluxSpectrum:
@@ -97,7 +97,8 @@ class Application:
         results_path : str
             Path to the Serpent ``_res.m`` results file.
         kind : str, optional
-            Kind of observable, by default ``"keff"``.
+            Kind of observable, by default ``"keff"``. Only ``"keff"`` is
+            supported; other kinds raise a ValueError.
         materials : list of str, optional
             Materials for which the sensitivity is extracted. Defaults to
             ``["total"]``.
@@ -122,6 +123,12 @@ class Application:
             An Application with the calculated value, sensitivity, and
             (optionally) flux spectrum extracted from the Serpent files.
         """
+        if kind != "keff":
+            raise ValueError(
+                f"Application.from_serpent only supports kind='keff', got '{kind}'. The calculated value is "
+                "read from absKeff and Serpent writes no sensitivity for other kinds (e.g. a void "
+                "coefficient needs a nominal and a voided run); load such applications with from_hdf5."
+            )
         if materials is None:
             materials = ["total"]
         if pertlist is None:
@@ -167,8 +174,7 @@ class Application:
             A new Application instance with the loaded data.
         """
         with h5py.File(file_path, "r") as f:
-            if kind not in f:
-                raise KeyError(f"Application type '{kind}' not found in {file_path}")
+            _check_kind(f, kind, file_path, "Application")
             if title not in f[kind]:
                 raise KeyError(f"Application '{title}' not found in {file_path}")
 
@@ -481,7 +487,7 @@ class ApplicationSuite:
         return cls(applications={app.title: app for app in applications})
 
     @classmethod
-    def from_hdf5(cls, file_path: str, titles: list, kind: str = "keff"):
+    def from_hdf5(cls, file_path: str, titles: list | None, kind: str = "keff"):
         """Retrieve a set of applications from a database.
 
         Parameters
@@ -491,17 +497,25 @@ class ApplicationSuite:
         titles : list, optional
             Titles which have to be extracted from the database, if None
             return all the applications available in the database, by default None.
+        kind : str, default "keff"
+            HDF5 group (kind of observable) the applications are read from.
 
         Returns
         -------
-        BenchmarkSuite
-            Returns a BenchmarkSuite object containing the imported Benchmark objects.
+        ApplicationSuite
+            Returns an ApplicationSuite object containing the imported Application objects.
+
+        Raises
+        ------
+        KeyError
+            If `kind` is not a group of the file, or a title is not stored under it.
         """
         if not titles:
             with h5py.File(file_path, "r") as f:
+                _check_kind(f, kind, file_path, "Application")
                 titles = list(f[kind].keys())
 
-        return cls(applications={title: Application.from_hdf5(file_path, title) for title in titles})
+        return cls(applications={title: Application.from_hdf5(file_path, title, kind=kind) for title in titles})
 
     @classmethod
     def from_yaml(cls, path: str):
