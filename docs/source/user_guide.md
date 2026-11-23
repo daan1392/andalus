@@ -295,8 +295,10 @@ Monte Carlo codes. Two methods are available; `to_ace_direct` is the recommended
 **`to_ace_direct`** edits an already-processed ACE file's `XSS` array directly (via
 `andalus.ace.ACE.perturb`/`perturb_nu`/`perturb_chi`), taking a fraction of a second per nuclide.
 It does not talk to ENDF or run NJOY, instead only an ASCII ACE file per adjusted ZAI is needed.
-Point it at either a directory of ACE files named by ZAID (`ace_dir`) or a Serpent-style xsdata
-file for libraries with non-standard naming, such as JEFF-4.0 (`xsdata_path`). From the xsdata
+Point it at either a directory of ACE files named by ZAID (`ace_dir`, e.g. `92235.03c`) or a
+Serpent-style xsdata file for libraries with non-standard naming, such as JEFF-4.0 (`xsdata_path`).
+Metastable states add 400 to the mass number in the ZAID, so Am-242m is read from and written to
+`95642.03c` and Am-242 to `95242.03c`. From the xsdata
 file, the transport entry with the nuclide's ZA, isomeric state and a temperature within 1 K of
 `temperature` is used; if there is none, the error lists the temperatures that are available:
 

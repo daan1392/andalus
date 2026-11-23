@@ -24,6 +24,21 @@ from andalus.utils import delta_response, sandwich, zam2nuclide
 #: Largest difference (K) between the requested temperature and an xsdata entry's temperature.
 _XSDATA_TEMPERATURE_TOLERANCE = 1.0
 
+#: Neutron mass in atomic mass units (CODATA 2018), to convert an ACE AWR to the
+#: atomic mass written in Serpent xsdata files.
+_NEUTRON_MASS_AMU = 1.00866491595
+
+
+def _zai_to_ace_zaid(zai: int) -> int:
+    """Return the ACE ZAID (``Z*1000 + A``) of a ZAI, using the isomer convention.
+
+    Metastable states get ``300 + 100 * isomeric_state`` added to the mass
+    number, so Am-242m (ZAI 952421) is ZAID 95642, while ground states keep
+    ``Z*1000 + A`` (Am-242, ZAI 952420, is 95242).
+    """
+    za, isomeric_state = divmod(zai, 10)
+    return za + 300 + 100 * isomeric_state if isomeric_state else za
+
 
 def _parse_xsdata(path: str) -> dict[int, dict[float, str]]:
     """Map ZAI and temperature to source ACE file path from a Serpent xsdata file.
@@ -1043,11 +1058,14 @@ class AssimilationSuite:
         out_dir : str
             Directory to write perturbed ACE files to (created if it doesn't
             exist). Written files are named ``{ZAID}.{temperature_code}c``
-            (e.g. ``92235.03c`` for U-235 at 300 K).
+            (e.g. ``92235.03c`` for U-235 at 300 K). Metastable states add
+            ``300 + 100 * isomeric_state`` to the mass number in the ZAID, so
+            Am-242m is written as ``95642.03c`` and Am-242 as ``95242.03c``.
         ace_dir : str, optional
             Directory containing source ACE files, named
-            ``{ZAID}.{temperature_code}c`` — the same naming convention
-            `to_ace`'s xsdata output uses. Mutually exclusive with `xsdata_path`.
+            ``{ZAID}.{temperature_code}c`` with the same ZAID convention as
+            the written files (``95642.03c`` for Am-242m). Mutually exclusive
+            with `xsdata_path`.
         xsdata_path : str, optional
             Path to a Serpent-style xsdata file mapping ZAIDs to source ACE
             file paths (relative paths are resolved against the xsdata file's
@@ -1065,7 +1083,9 @@ class AssimilationSuite:
             If True, only process ZAIs present in the application suite.
         create_xsdata : bool, default False
             If True, writes a Serpent-style xsdata directory file
-            (``adjusted.xsdata`` in `out_dir`) listing the written ACE files.
+            (``adjusted.xsdata`` in `out_dir`) listing the written ACE files,
+            with the ZA, isomeric state and atomic mass (from the ACE file's
+            AWR) of each nuclide.
 
         Returns
         -------
@@ -1129,14 +1149,14 @@ class AssimilationSuite:
 
         os.makedirs(out_dir, exist_ok=True)
 
-        def _xsdata_line(zai: int, path: str) -> str:
-            alias = f"{int(zai / 10)}.{int(temperature // 100):02}c"
-            return f"  {alias} {alias} 1 {int(zai / 10)} 0 {zai / 10 % 1000} {temperature} 0 {path}"
+        def _xsdata_line(zai: int, alias: str, awr: float) -> str:
+            atomic_mass = awr * _NEUTRON_MASS_AMU
+            return f"  {alias} {alias} 1 {zai // 10} {zai % 10} {atomic_mass:.6f} {temperature} 0 {alias}"
 
         written_paths = []
         xsdata_lines = []
         for zai in zais:
-            filename = f"{int(zai / 10)}.{int(temperature // 100):02}c"
+            filename = f"{_zai_to_ace_zaid(zai)}.{int(temperature // 100):02}c"
             if xsdata_map is not None:
                 assert xsdata_path is not None
                 in_path = _find_xsdata_entry(xsdata_map, zai, temperature, xsdata_path)
@@ -1173,7 +1193,7 @@ class AssimilationSuite:
             ace.write(out_path)
             written_paths.append(out_path)
             if create_xsdata:
-                xsdata_lines.append(_xsdata_line(zai, filename))
+                xsdata_lines.append(_xsdata_line(zai, filename, ace.header.mass))
 
         if create_xsdata and xsdata_lines:
             with open(os.path.join(out_dir, "adjusted.xsdata"), "a") as f:

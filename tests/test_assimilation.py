@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from andalus.assimilation import AssimilationSuite, _find_xsdata_entry, _parse_xsdata
+from andalus.assimilation import AssimilationSuite, _find_xsdata_entry, _parse_xsdata, _zai_to_ace_zaid
 
 
 @pytest.fixture
@@ -679,6 +679,61 @@ def test_to_ace_direct_routes_chi_mts_to_perturb_chi(assimilation_setup, tmp_pat
         expected[in_bin] *= 1.2
         expected /= np.trapz(expected, e_out)
         np.testing.assert_allclose(result_table.pdf, expected, rtol=1e-6)
+
+
+def test_zai_to_ace_zaid_isomer_convention():
+    assert _zai_to_ace_zaid(952420) == 95242
+    assert _zai_to_ace_zaid(952421) == 95642
+    assert _zai_to_ace_zaid(10010) == 1001
+
+
+def test_to_ace_direct_isomer_files_and_xsdata(assimilation_setup, tmp_path):
+    """A metastable state used to be read from and written to the ground state's file
+    (``{ZA}.03c``), and its xsdata line had isomeric state 0 and the mass number as
+    atomic mass. The isomer must use its own ZAID (A + 400) and the xsdata line must
+    carry the isomeric state and the atomic mass from the ACE AWR."""
+    import shutil
+
+    from andalus.ace import ACE
+
+    suite = assimilation_setup
+
+    # U-235 data stands in for both the ground state and a (fictitious) metastable state.
+    ace_dir = tmp_path / "ace"
+    ace_dir.mkdir()
+    shutil.copy("data/92235.03c", ace_dir / "92235.03c")
+    shutil.copy("data/92235.03c", ace_dir / "92635.03c")
+
+    source = ACE.read("data/92235.03c")
+    energy = source.reactions[18].energies
+    e_lo, e_hi = float(energy[10]) * 1e6, float(energy[50]) * 1e6
+    suite.xs_adjustment = pd.Series(
+        [0.2, 0.1],
+        index=pd.MultiIndex.from_tuples(
+            [(922350, 18, e_lo, e_hi), (922351, 18, e_lo, e_hi)], names=["ZAI", "MT", "E_min_eV", "E_max_eV"]
+        ),
+    )
+
+    out_dir = tmp_path / "out"
+    written = suite.to_ace_direct(ace_dir=str(ace_dir), out_dir=str(out_dir), create_xsdata=True)
+
+    assert [os.path.basename(p) for p in written] == ["92235.03c", "92635.03c"]
+    in_bin = (energy * 1e6 > e_lo) & (energy * 1e6 <= e_hi)
+    for path, factor in zip(written, [1.2, 1.1], strict=True):
+        ratio = ACE.read(path).reactions[18].xs / source.reactions[18].xs
+        np.testing.assert_allclose(ratio[in_bin], factor, rtol=1e-10)
+
+    lines = (out_dir / "adjusted.xsdata").read_text().splitlines()
+    fields = [line.split() for line in lines]
+    assert [f[0] for f in fields] == ["92235.03c", "92635.03c"]
+    assert [(f[2], f[3], f[4]) for f in fields] == [("1", "92235", "0"), ("1", "92235", "1")]
+    for f in fields:
+        assert float(f[5]) == pytest.approx(source.header.mass * 1.00866491595, rel=1e-6)
+        assert f[8] == f[0]
+
+    # The written xsdata file can be read back by the parser, isomer included.
+    parsed = _parse_xsdata(str(out_dir / "adjusted.xsdata"))
+    assert set(parsed) == {922350, 922351}
 
 
 def test_to_ace_direct_skips_mubar_with_warning(assimilation_setup, tmp_path):
