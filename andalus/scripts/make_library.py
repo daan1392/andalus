@@ -54,10 +54,12 @@ import os
 import re
 import traceback
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime
 
 import pandas as pd
 import sandy
+import sandy.njoy
 import tables
 
 from andalus.covariance import Covariance
@@ -74,10 +76,34 @@ _MF_NEEDED = {GENDF: {3}, "errorr31": {31}, "errorr33": {32, 33}, "errorr34": {3
 # ERRORR section -> keyword of ``sandy.Endf6.get_errorr`` that switches it on
 _SWITCH = {"errorr31": "nubar", "errorr33": "xs", "errorr34": "mubar", "errorr35": "chi"}
 # JEFF-4.0 ``n_92-U-235g.jeff``, JEFF-3.3 ``92-U-235g.jeff33`` (state letter g/m/n)
+_NUBAR_MTS = {452, 455, 456}  # total, delayed and prompt nubar (MF1)
 _JEFF_NAME = re.compile(r"^(?:n_)?(\d+)-([A-Za-z]+)-(\d+)([gmn]?)\.\w+$")
 # ENDF/B-VIII.1 ``n-092_U_235.endf``, ``n-073_Ta_180m1.endf`` (state m1, m2, ...)
 _ENDFB_NAME = re.compile(r"^n-(\d+)_([A-Za-z]+)_(\d+)(?:m(\d+))?\.\w+$")
 _ISOMER = {"": 0, "g": 0, "m": 1, "n": 2}
+
+
+@contextmanager
+def _groupr_without(mts: set[int]):
+    """
+    Keep GROUPR from being asked for the given MF3 reactions while the context is active.
+
+    SANDY asks GROUPR for total, delayed and prompt nubar (MT 452, 455, 456) whenever an evaluation
+    has a fission cross section, and NJOY stops if one of them is missing; several minor actinides
+    have no delayed nubar. SANDY has no option for it, so the lines are taken out of the input it
+    writes.
+    """
+    original = sandy.njoy._groupr_input
+    skip = {f"3 {mt:d} /" for mt in mts}
+
+    def groupr_input(*args, **kwargs):
+        return "\n".join(line for line in original(*args, **kwargs).split("\n") if line not in skip)
+
+    sandy.njoy._groupr_input = groupr_input  # ty: ignore[invalid-assignment]
+    try:
+        yield
+    finally:
+        sandy.njoy._groupr_input = original
 
 
 def _parse_name(filename: str) -> int | None:
@@ -182,7 +208,8 @@ def process_endf6(
     todo = [key for key in sections if overwrite or not os.path.exists(paths[key])]
     if todo:
         endf6 = sandy.Endf6.from_file(endf6_path)
-        mfs = set(endf6.get_records().MF.unique())
+        records = endf6.get_records()
+        mfs = set(records.MF.unique())
         todo = [key for key in todo if mfs & _MF_NEEDED[key]]  # skip sections the evaluation does not have
     if todo:
         ek = getattr(sandy.energy_grids, energy_grid)
@@ -199,7 +226,9 @@ def process_endf6(
         )
         os.makedirs(errorr_dir, exist_ok=True)
         if GENDF in todo:
-            endf6.get_gendf(**njoy_kws).to_file(paths[GENDF])
+            missing = _NUBAR_MTS - set(records.loc[records.MF == 1, "MT"])
+            with _groupr_without(missing):
+                endf6.get_gendf(**njoy_kws).to_file(paths[GENDF])
         if set(todo) - {GENDF}:
             switches = {_SWITCH[key]: (None if key in todo else False) for key in _SWITCH}
             errorrs = endf6.get_errorr(errorr_kws=dict(ek=ek), **njoy_kws, **switches)

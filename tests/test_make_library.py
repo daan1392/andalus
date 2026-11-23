@@ -176,6 +176,7 @@ class _FakeEndf6:
 
     calls: list = []
     gendf_calls: list = []
+    nubar_mts: tuple = ()
     mfs = (33, 34)
 
     @classmethod
@@ -183,9 +184,12 @@ class _FakeEndf6:
         return cls()
 
     def get_records(self):
-        return pd.DataFrame({"MF": list(self.mfs)})
+        mfs = [*self.mfs, *([1] * len(self.nubar_mts))]
+        mts = [*([1] * len(self.mfs)), *self.nubar_mts]
+        return pd.DataFrame({"MF": mfs, "MT": mts})
 
     def get_gendf(self, **kwargs):
+        kwargs["groupr_input"] = ml.sandy.njoy._groupr_input(20, 21, 22, 9228, nubar=True)
         type(self).gendf_calls.append(kwargs)
         return _FakeErrorr("data/u235.gendf")
 
@@ -202,6 +206,7 @@ class _FakeEndf6:
 def fake_njoy(monkeypatch):
     _FakeEndf6.calls = []
     _FakeEndf6.gendf_calls = []
+    _FakeEndf6.nubar_mts = ()
     _FakeEndf6.mfs = (33, 34)
     monkeypatch.setattr(ml.sandy, "Endf6", _FakeEndf6)
     return _FakeEndf6
@@ -282,3 +287,17 @@ def test_free_neutron_is_logged(tmp_path):
     outcome = build_library(str(endf6), str(errorr), str(tmp_path / "lib.h5"), sections=("gendf",), quantities=("xs",))
     assert outcome["written"] == [10]
     assert ml._nuclide_name(10) == "n" and ml._nuclide_name(922350) == "U235"
+
+
+def test_groupr_is_asked_only_for_nubar_in_the_evaluation(workspace, fake_njoy):
+    """Minor actinides without delayed nubar (MT455) make NJOY stop if it is requested."""
+    endf6, errorr, _ = workspace
+    os.remove(f"{errorr}/n_92-U-235g.gendf")
+    fake_njoy.mfs = (3,)
+    fake_njoy.nubar_mts = (452, 456)
+    ml.process_endf6(f"{endf6}/n_92-U-235g.jeff", errorr, sections=("gendf",))
+    lines = fake_njoy.gendf_calls[0]["groupr_input"].split("\n")
+    assert "3 452 /" in lines and "3 456 /" in lines and "3 455 /" not in lines
+    assert lines[-3:] == ["0/", "0/", ""]  # the rest of the input is untouched
+    # outside the run SANDY's input is back to normal
+    assert "3 455 /" in ml.sandy.njoy._groupr_input(20, 21, 22, 9228, nubar=True)
